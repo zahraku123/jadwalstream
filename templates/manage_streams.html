@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-8">
+        <h3>Manage Stream Mappings</h3>
+        <p class="text-muted">View, delete or export saved stream mappings per token.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <form method="POST" action="{{ url_for('export_stream_mapping') }}" style="display:inline;">
+            <button class="btn btn-outline-primary">Export JSON</button>
+        </form>
+    </div>
+</div>
+
+{% if stream_mapping %}
+    {% for token, streams in stream_mapping.items() %}
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>{{ token }}</strong>
+            <div>
+                <form method="POST" action="{{ url_for('delete_token_mapping') }}" style="display:inline;">
+                    <input type="hidden" name="token_file" value="{{ token }}" />
+                    <button class="btn btn-sm btn-danger" onclick="return confirm('Delete all mappings for {{ token }}?');">Delete Token</button>
+                </form>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if streams %}
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Stream Title</th>
+                            <th>Stream ID</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stream_id, meta in streams.items() %}
+                        <tr>
+                            <td>{{ meta['title'] if meta and 'title' in meta else stream_id }}</td>
+                            <td><code>{{ stream_id }}</code></td>
+                            <td>
+                                <form method="POST" action="{{ url_for('delete_stream_mapping') }}" style="display:inline;">
+                                    <input type="hidden" name="token_file" value="{{ token }}" />
+                                    <input type="hidden" name="stream_id" value="{{ stream_id }}" />
+                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this stream mapping?');">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-light mb-0">No streams saved for this token.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+<div class="alert alert-info">No stream mappings found.</div>
+{% endif %}
+
+{% endblock %}

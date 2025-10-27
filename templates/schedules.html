@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2>Manage Live Stream Schedules</h2>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addScheduleModal">
+                <i class="fas fa-plus"></i> Add New Schedule
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Start Time</th>
+                                <th>Privacy</th>
+                                <th>Stream</th>
+                                <th>Token</th>
+                                <th>Auto Start/Stop</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for schedule in schedules %}
+                            <tr>
+                                <td>
+                                    {{ schedule.title }}
+                                    {% if schedule.madeForKids %}
+                                    <span class="badge bg-info">Kids</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ schedule.scheduledStartTime }}</td>
+                                <td><span class="badge bg-secondary">{{ schedule.privacyStatus }}</span></td>
+                                <td>
+                                    {% if schedule.useExistingStream %}
+                                        {% set sid = schedule.streamNameExisting %}
+                                        {% set token = schedule.tokenFile %}
+                                        {% if stream_mapping and token in stream_mapping and sid in stream_mapping[token] %}
+                                            <span class="text-primary">{{ stream_mapping[token][sid].title }} <small class="text-muted">({{ sid }})</small></span>
+                                        {% else %}
+                                            <span class="text-primary">{{ sid }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                    <span class="text-success">New Stream</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ schedule.tokenFile }}</td>
+                                <td>
+                                    {% if schedule.autoStart %}
+                                    <span class="badge bg-success">Auto Start</span>
+                                    {% endif %}
+                                    {% if schedule.autoStop %}
+                                    <span class="badge bg-danger">Auto Stop</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if schedule.success %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group">
+                                        {% if schedule.broadcastLink %}
+                                        <a href="{{ schedule.broadcastLink }}" target="_blank" class="btn btn-sm btn-info">
+                                            <i class="fab fa-youtube"></i> View
+                                        </a>
+                                        {% endif %}
+                                        <a href="{{ url_for('edit_schedule', index=loop.index0) }}" class="btn btn-sm btn-warning">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteModal{{ loop.index0 }}">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </div>
+
+                                    <!-- Delete Confirmation Modal -->
+                                    <div class="modal fade" id="deleteModal{{ loop.index0 }}" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Confirm Delete</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    Are you sure you want to delete the schedule for "{{ schedule.title }}"?
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <form action="{{ url_for('delete_schedule', index=loop.index0) }}" method="POST" style="display: inline;">
+                                                        <button type="submit" class="btn btn-danger">Delete</button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Schedule Modal -->
+<div class="modal fade" id="addScheduleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Live Stream Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('add_schedule') }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-control" name="title" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Scheduled Start Time</label>
+                        <input type="datetime-local" class="form-control" name="scheduledStartTime" required>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Token File</label>
+                            {% if tokens %}
+                            <select class="form-control" name="tokenFile" id="tokenFileSelect_add" required>
+                                {% for token in tokens %}
+                                <option value="{{ token }}">{{ token }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <div class="alert alert-warning">
+                                No tokens available. Please <a href="{{ url_for('tokens') }}">create a token</a> first.
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Privacy Status</label>
+                            <select class="form-control" name="privacyStatus">
+                                <option value="unlisted">Unlisted</option>
+                                <option value="private">Private</option>
+                                <option value="public">Public</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    Stream Settings
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="useExistingStream" id="useExistingStream_add">
+                                            <label class="form-check-label" for="useExistingStream_add">
+                                                Use Existing Stream
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3" id="streamNameSection_add" style="display: none;">
+                                        <label class="form-label">Stream</label>
+                                        <select class="form-control" name="streamNameExisting" id="streamNameSelect_add">
+                                            <!-- populated by JS -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    Additional Settings
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="autoStart" id="autoStart">
+                                                <label class="form-check-label" for="autoStart">
+                                                    Auto Start
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="autoStop" id="autoStop">
+                                                <label class="form-check-label" for="autoStop">
+                                                    Auto Stop
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="madeForKids" id="madeForKids">
+                                                <label class="form-check-label" for="madeForKids">
+                                                    Made for Kids
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <label class="form-label">Thumbnail File (Optional)</label>
+                                        <input type="text" class="form-control" name="thumbnailFile" placeholder="Path to thumbnail file">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Schedule
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% set sm_json = stream_mapping | tojson %}
+<script>
+const streamMapping_add = {{ sm_json | safe }} || {};
+
+// Add Schedule Modal handlers
+function getAllStreams(mapping) {
+    const allStreams = {};
+    // Flatten all streams into one list
+    for (const [token, streams] of Object.entries(mapping)) {
+        Object.entries(streams).forEach(([id, meta]) => {
+            allStreams[id] = meta;
+        });
+    }
+    return allStreams;
+}
+
+function populateStreamSelect_Add() {
+    const sel = document.getElementById('streamNameSelect_add');
+    sel.innerHTML = '';
+    
+    // Add empty option
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.text = 'Select a stream';
+    sel.appendChild(emptyOpt);
+    
+    // Get all streams
+    const allStreams = getAllStreams(streamMapping_add);
+    const keys = Object.keys(allStreams);
+    
+    if (keys.length === 0) {
+        sel.disabled = true;
+        return;
+    }
+    
+    sel.disabled = false;
+    // Create array of entries for sorting
+    const entries = keys.map(sid => {
+        const meta = allStreams[sid] || {};
+        return {
+            id: sid,
+            name: meta.title || 'Unnamed Stream'
+        };
+    });
+
+    // Sort by name
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Add options
+    for (const entry of entries) {
+        const opt = document.createElement('option');
+        opt.value = entry.id;  // Keep the ID as the value
+        opt.text = entry.name; // Show only the name
+        sel.appendChild(opt);
+    }
+}
+
+// Add Schedule event listeners
+document.getElementById('useExistingStream_add')?.addEventListener('change', function() {
+    const section = document.getElementById('streamNameSection_add');
+    section.style.display = this.checked ? 'block' : 'none';
+    if (this.checked) {
+        populateStreamSelect_Add();
+    }
+});
+
+// Initialize streams when modal opens
+const addModal = document.getElementById('addScheduleModal');
+if (addModal) {
+    addModal.addEventListener('show.bs.modal', function() {
+        const useExisting = document.getElementById('useExistingStream_add');
+        if (useExisting.checked) {
+            populateStreamSelect_Add();
+        }
+    });
+}
+
+// Edit Schedule Functions
+function populateStreamSelect_Edit() {
+    const sel = document.getElementById('streamNameSelect_edit');
+    if (!sel) return;  // If not on edit page
+    
+    sel.innerHTML = '';
+    
+    // Add empty option
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.text = 'Select a stream';
+    sel.appendChild(emptyOpt);
+    
+    // Get all streams
+    const allStreams = getAllStreams(streamMapping_add);
+    const keys = Object.keys(allStreams);
+    
+    if (keys.length === 0) {
+        sel.disabled = true;
+        return;
+    }
+    
+    sel.disabled = false;
+    for (const sid of keys) {
+        const meta = allStreams[sid] || {};
+        const opt = document.createElement('option');
+        opt.value = sid;
+        opt.text = `${meta.title || 'Unnamed Stream'} (${sid})`;
+        sel.appendChild(opt);
+    }
+}
+
+// Edit Schedule event listeners
+document.getElementById('useExistingStream_edit')?.addEventListener('change', function() {
+    const section = document.getElementById('streamNameSection_edit');
+    if (section) {
+        section.style.display = this.checked ? 'block' : 'none';
+        if (this.checked) {
+            populateStreamSelect_Edit();
+        }
+    }
+});
+</script>
+{% endblock %}

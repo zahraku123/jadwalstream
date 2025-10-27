@@ -1,0 +1,81 @@
+{
+    "token.json": {
+        "hFw9RFC1hMnPrUj8BiIukw1761411457593425": {
+            "title": "labubu2",
+            "cdn": {
+                "ingestionType": "rtmp",
+                "ingestionInfo": {
+                    "streamName": "hud5-awpv-t3qe-wx0r-frws",
+                    "ingestionAddress": "rtmp://a.rtmp.youtube.com/live2",
+                    "backupIngestionAddress": "rtmp://b.rtmp.youtube.com/live2?backup=1",
+                    "rtmpsIngestionAddress": "rtmps://a.rtmps.youtube.com/live2",
+                    "rtmpsBackupIngestionAddress": "rtmps://b.rtmps.youtube.com/live2?backup=1"
+                },
+                "resolution": "variable",
+                "frameRate": "variable"
+            }
+        },
+        "hFw9RFC1hMnPrUj8BiIukw1761409228945723": {
+            "title": "labubu1",
+            "cdn": {
+                "ingestionType": "rtmp",
+                "ingestionInfo": {
+                    "streamName": "kd52-v21v-0cpc-sttf-eprv",
+                    "ingestionAddress": "rtmp://a.rtmp.youtube.com/live2",
+                    "backupIngestionAddress": "rtmp://b.rtmp.youtube.com/live2?backup=1",
+                    "rtmpsIngestionAddress": "rtmps://a.rtmps.youtube.com/live2",
+                    "rtmpsBackupIngestionAddress": "rtmps://b.rtmps.youtube.com/live2?backup=1"
+                },
+                "resolution": "variable",
+                "frameRate": "variable"
+            }
+        },
+        "hFw9RFC1hMnPrUj8BiIukw1741878305704982": {
+            "title": "Default stream key",
+            "cdn": {
+                "ingestionType": "rtmp",
+                "ingestionInfo": {
+                    "streamName": "d5ca-pg9t-4dah-6bmq-3s8w",
+                    "ingestionAddress": "rtmp://a.rtmp.youtube.com/live2",
+                    "backupIngestionAddress": "rtmp://b.rtmp.youtube.com/live2?backup=1",
+                    "rtmpsIngestionAddress": "rtmps://a.rtmps.youtube.com/live2",
+                    "rtmpsBackupIngestionAddress": "rtmps://b.rtmps.youtube.com/live2?backup=1"
+                },
+                "resolution": "variable",
+                "frameRate": "variable"
+            }
+        }
+    },
+    "zahra1.json": {
+        "B-vyXS1XUwnoLJ1jftGb9A1761499041868963": {
+            "title": "zahra1",
+            "cdn": {
+                "ingestionType": "rtmp",
+                "ingestionInfo": {
+                    "streamName": "xwtb-u26s-yb91-9fw3-3s6t",
+                    "ingestionAddress": "rtmp://a.rtmp.youtube.com/live2",
+                    "backupIngestionAddress": "rtmp://b.rtmp.youtube.com/live2?backup=1",
+                    "rtmpsIngestionAddress": "rtmps://a.rtmps.youtube.com/live2",
+                    "rtmpsBackupIngestionAddress": "rtmps://b.rtmps.youtube.com/live2?backup=1"
+                },
+                "resolution": "variable",
+                "frameRate": "variable"
+            }
+        },
+        "B-vyXS1XUwnoLJ1jftGb9A1741417004826720": {
+            "title": "Default stream key",
+            "cdn": {
+                "ingestionType": "rtmp",
+                "ingestionInfo": {
+                    "streamName": "wkzh-kavu-w9t0-qgey-0rkc",
+                    "ingestionAddress": "rtmp://a.rtmp.youtube.com/live2",
+                    "backupIngestionAddress": "rtmp://b.rtmp.youtube.com/live2?backup=1",
+                    "rtmpsIngestionAddress": "rtmps://a.rtmps.youtube.com/live2",
+                    "rtmpsBackupIngestionAddress": "rtmps://b.rtmps.youtube.com/live2?backup=1"
+                },
+                "resolution": "variable",
+                "frameRate": "variable"
+            }
+        }
+    }
+}

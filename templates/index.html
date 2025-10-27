@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center mb-4">
+        <h1>YouTube Live Scheduler</h1>
+        <p class="lead">Manage your YouTube live streams and scheduling with ease</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-calendar fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Live Stream Schedules</h5>
+                <p class="card-text">Create and manage your YouTube live stream schedules. Set up new streams or use existing ones.</p>
+                <a href="{{ url_for('schedules') }}" class="btn btn-primary">
+                    <i class="fas fa-list"></i> View Schedules
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-key fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Channel Tokens</h5>
+                <p class="card-text">Generate and manage YouTube API tokens for different channels. Each channel needs its own token.</p>
+                <a href="{{ url_for('tokens') }}" class="btn btn-success">
+                    <i class="fas fa-plus-circle"></i> Manage Tokens
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-clock fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Auto Scheduling</h5>
+                <p class="card-text">Set up automatic scheduling times for when the system should check and create live streams.</p>
+                <a href="{{ url_for('auto_schedule') }}" class="btn btn-warning">
+                    <i class="fas fa-cog"></i> Configure Times
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Quick Stats
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Pending Schedules
+                        <span class="badge bg-warning rounded-pill">{{ schedules|selectattr('success', 'equalto', false)|list|length if schedules else 0 }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Completed Streams
+                        <span class="badge bg-success rounded-pill">{{ schedules|selectattr('success', 'equalto', true)|list|length if schedules else 0 }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Available Tokens
+                        <span class="badge bg-primary rounded-pill">{{ tokens|length if tokens else 0 }}</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-tools"></i> Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addScheduleModal">
+                        <i class="fas fa-plus"></i> New Live Stream Schedule
+                    </button>
+                    <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#createTokenModal">
+                        <i class="fas fa-key"></i> Generate New Token
+                    </button>
+                    <form action="{{ url_for('run_scheduler') }}" method="POST" class="d-grid">
+                        <button type="submit" class="btn btn-outline-warning">
+                            <i class="fas fa-play"></i> Run Scheduler Now
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

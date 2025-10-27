@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2>Auto Schedule Configuration</h2>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Schedule Times</h5>
+                <form action="{{ url_for('update_schedule_times') }}" method="POST" id="scheduleForm">
+                    <div id="timesList">
+                        {% for time in schedule_times %}
+                        <div class="input-group mb-3">
+                            <input type="time" class="form-control" name="times[]" value="{{ time }}" required>
+                            <button type="button" class="btn btn-danger" onclick="removeTime(this)">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <button type="button" class="btn btn-secondary mb-3" onclick="addNewTime()">
+                        <i class="fas fa-plus"></i> Add Time
+                    </button>
+                    
+                    <div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Schedule Times
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Scheduler Status</h5>
+                <div class="mb-3">
+                    <p><strong>Status:</strong> 
+                        {% if scheduler_status.active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-warning">Inactive</span>
+                        {% endif %}
+                    </p>
+                    <p><strong>Last Run:</strong> 
+                        {% if scheduler_status.last_run %}
+                        {{ scheduler_status.last_run }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </p>
+                    <p><strong>Next Check:</strong> 
+                        {{ scheduler_status.next_check or 'Not scheduled' }}
+                    </p>
+                    <p><strong>Last Status:</strong> 
+                        {% if 'Error' in scheduler_status.last_status %}
+                        <span class="text-danger">{{ scheduler_status.last_status }}</span>
+                        {% else %}
+                        <span class="text-success">{{ scheduler_status.last_status }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Manual Control</h5>
+                <form action="{{ url_for('run_scheduler') }}" method="POST">
+                    <p class="text-muted">
+                        Click the button below to run the scheduler manually.
+                        This will process all pending schedules immediately.
+                    </p>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-play"></i> Run Scheduler Now
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addNewTime() {
+    const timesList = document.getElementById('timesList');
+    const newTimeGroup = document.createElement('div');
+    newTimeGroup.className = 'input-group mb-3';
+    newTimeGroup.innerHTML = `
+        <input type="time" class="form-control" name="times[]" required>
+        <button type="button" class="btn btn-danger" onclick="removeTime(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    timesList.appendChild(newTimeGroup);
+}
+
+function removeTime(button) {
+    button.parentElement.remove();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2>Token Management</h2>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createTokenModal">
+                <i class="fas fa-plus"></i> Create New Token
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Token Name</th>
+                                <th>Created Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for token in tokens %}
+                            <tr>
+                                <td>{{ token }}</td>
+                                <td>{{ token }}</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-danger" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#deleteModal{{ loop.index0 }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+
+                                    <!-- Delete Modal for {{ token }} -->
+                                    <div class="modal fade" id="deleteModal{{ loop.index0 }}" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Confirm Delete</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    Are you sure you want to delete token "{{ token }}"?
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <form action="{{ url_for('delete_token') }}" method="POST" style="display: inline;">
+                                                        <input type="hidden" name="token_name" value="{{ token }}">
+                                                        <button type="submit" class="btn btn-danger">Delete</button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Token Modal -->
+<div class="modal fade" id="createTokenModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Token</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('create_token') }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Token Name</label>
+                        <input type="text" class="form-control" name="token_name" placeholder="channel1_token.json" required>
+                        <small class="form-text text-muted">
+                            The token file name will be used to identify different channels.
+                        </small>
+                    </div>
+                    <button type="submit" class="btn btn-success">Create Token</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
