@@ -491,4 +491,4 @@ if __name__ == '__main__':
         start_scheduler_thread()
 
     # Start Flask with debug mode enabled
-    app.run(debug=True, use_reloader=True)
+    app.run(debug=True, use_reloader=True, host='0.0.0.0')
