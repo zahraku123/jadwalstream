@@ -1,0 +1,6 @@
+flask
+pandas
+pytz
+google-auth-oauthlib
+schedule
+openpyxl
