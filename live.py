@@ -6,21 +6,30 @@ from datetime import datetime
 import pytz
 import time
 import logging
+import json
 
 # ================= CONFIG =================
 EXCEL_FILE = 'live_stream_data.xlsx'
 DEFAULT_TIMEZONE = 'Asia/Jakarta'
 DRY_RUN = False
+STREAM_MAPPING_FILE = 'stream_mapping.json'
 
-# Mapping Nama Stream → Stream ID (isi sesuai channel bro)
-STREAM_MAPPING = {
-    "labubu1": "hFw9RFC1hMnPrUj8BiIukw1761409228945723",
-    "Default stream key": "hFw9RFC1hMnPrUj8BiIukw1741878305704982",
-    "labubu2": "hFw9RFC1hMnPrUj8BiIukw1761411457593425"
-}
-
-# Reverse mapping for looking up names from IDs
-REVERSE_STREAM_MAPPING = {v: k for k, v in STREAM_MAPPING.items()}
+def load_stream_mapping(token_file):
+    try:
+        with open(STREAM_MAPPING_FILE, 'r') as f:
+            mapping_data = json.load(f)
+            if token_file in mapping_data:
+                # Extract stream IDs and titles from the token's mapping
+                stream_mapping = {}
+                for stream_id, stream_info in mapping_data[token_file].items():
+                    stream_mapping[stream_info['title']] = stream_id
+                return stream_mapping
+            else:
+                logging.error(f"Token file {token_file} not found in {STREAM_MAPPING_FILE}")
+                return {}
+    except Exception as e:
+        logging.error(f"Error loading stream mapping: {e}")
+        return {}
 # =========================================
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,26 +40,30 @@ def get_youtube_service(token_file):
     logging.info(f"✅ Authenticated with token: {token_file}")
     return youtube
 
-def get_stream_id_from_name(name):
+def get_stream_id_from_name(name, token_file):
+    # Load stream mapping for this token
+    stream_mapping = load_stream_mapping(token_file)
+    reverse_mapping = {v: k for k, v in stream_mapping.items()}
+    
     # First try to find it as a name
-    stream_id = STREAM_MAPPING.get(name)
+    stream_id = stream_mapping.get(name)
     if stream_id:
         logging.info(f"Resolved stream name '{name}' → ID '{stream_id}'")
         return stream_id
     
     # If not found, check if it's actually an ID
-    if name in REVERSE_STREAM_MAPPING:
+    if name in reverse_mapping:
         stream_id = name
-        name = REVERSE_STREAM_MAPPING[name]
+        name = reverse_mapping[name]
         logging.info(f"Found stream ID '{stream_id}' → name '{name}'")
         return stream_id
     
-    logging.warning(f"Stream name/ID '{name}' not found in STREAM_MAPPING")
+    logging.warning(f"Stream name/ID '{name}' not found in stream mapping for {token_file}")
     return None
 
 def schedule_live_stream(youtube, title, description, scheduled_start_time,
                          privacy_status, auto_start=False, auto_stop=False, made_for_kids=False,
-                         use_existing_stream=False, streamNameExisting=None):
+                         use_existing_stream=False, streamNameExisting=None, token_file=None):
     try:
         # Validasi bro
         if use_existing_stream:
@@ -59,12 +72,16 @@ def schedule_live_stream(youtube, title, description, scheduled_start_time,
             
             stream_input = streamNameExisting.strip()
             
-            # If it's an ID, get the name for display
-            display_name = REVERSE_STREAM_MAPPING.get(stream_input, stream_input)
+            # Load stream mapping for this token
+            stream_mapping = load_stream_mapping(token_file)
+            reverse_mapping = {v: k for k, v in stream_mapping.items()}
             
-            stream_id = get_stream_id_from_name(stream_input)
+            # If it's an ID, get the name for display
+            display_name = reverse_mapping.get(stream_input, stream_input)
+            
+            stream_id = get_stream_id_from_name(stream_input, token_file)
             if not stream_id:
-                raise ValueError(f"Stream name/ID '{display_name}' tidak ditemukan di mapping STREAM_MAPPING bro!")
+                raise ValueError(f"Stream name/ID '{display_name}' tidak ditemukan di mapping untuk token {token_file} bro!")
             
             logging.info(f"Using existing stream: '{display_name}' (ID: {stream_id})")
         else:
@@ -180,7 +197,7 @@ def main():
                 broadcast_id, stream_id = schedule_live_stream(
                     youtube, title, description, scheduled_start_time,
                     privacy_status, auto_start, auto_stop, made_for_kids,
-                    use_existing_stream, streamNameExisting
+                    use_existing_stream, streamNameExisting, token_file
                 )
 
                 # Upload thumbnail
