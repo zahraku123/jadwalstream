@@ -13,58 +13,137 @@ Aplikasi web Flask untuk mengelola jadwal livestream YouTube dan streaming video
 - 📊 Real-time streaming status monitoring
 - 🔑 Multiple YouTube account support
 
-## 🚀 Quick Start (5 Minutes!)
+## 📋 Prerequisites
 
-### Auto Installation
+Sebelum instalasi, pastikan sistem Anda memiliki:
+
+- **Python 3.10+** (Wajib)
+- **FFmpeg** (Wajib untuk streaming)
+- **Node.js & PM2** (Opsional, untuk manajemen proses)
+- **Google OAuth credentials** (Wajib untuk YouTube API)
+
+### Cek Versi yang Terinstall
+
+```bash
+python3 --version    # Harus 3.10 atau lebih tinggi
+ffmpeg -version      # Harus terinstall
+node --version       # Opsional
+pm2 --version        # Opsional
+```
+
+## 🚀 Instalasi
+
+### Metode 1: Instalasi Otomatis (Recommended)
 
 ```bash
 # 1. Clone repository
-git clone <your-repo-url>
+git clone https://github.com/zahraku123/jadwalstream.git
 cd jadwalstream
 
-# 2. Run installer
+# 2. Jalankan script installer
 chmod +x install.sh
 ./install.sh
 ```
 
-The installer will:
-- ✅ Check all dependencies
-- ✅ Install Python packages
-- ✅ Install FFmpeg & PM2 (if needed)
-- ✅ Copy template files
-- ✅ Guide you through setup
-- ✅ Start the application
+Script installer akan otomatis:
+- ✅ Validasi Python 3.10+
+- ✅ Install dependencies Python dari requirements.txt
+- ✅ Install FFmpeg (jika belum ada)
+- ✅ Install Node.js & PM2 (opsional)
+- ✅ Copy semua file template (.example) ke file konfigurasi aktual
+- ✅ Membuat direktori yang diperlukan (videos, thumbnails, tokens, ffmpeg_logs)
+- ✅ Membuat file Excel jadwal kosong (live_stream_data.xlsx)
+- ✅ Memandu setup awal
+- ✅ Menjalankan aplikasi dengan PM2 (opsional)
 
-### Manual Installation
-
-See **[SETUP.md](SETUP.md)** for detailed manual setup instructions.
-
-## 📋 Prerequisites
-
-- **Python 3.10+**
-- **FFmpeg** (for streaming)
-- **PM2** (optional, for process management)
-- **Google OAuth credentials** - See [SETUP.md](SETUP.md)
-
-## 🔧 Configuration Files
-
-After cloning, you'll need to setup configuration files:
+### Metode 2: Instalasi Manual
 
 ```bash
-# Template files are provided, just copy them:
-cp *.example <actual-filename>
+# 1. Clone repository
+git clone https://github.com/zahraku123/jadwalstream.git
+cd jadwalstream
 
-# Or let install.sh do it automatically
+# 2. Install Python dependencies
+python3 -m pip install -r requirements.txt
+
+# Jika gagal karena PEP 668 (externally-managed-environment):
+python3 -m pip install -r requirements.txt --break-system-packages
+
+# Atau gunakan virtual environment (recommended):
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Install FFmpeg
+# Ubuntu/Debian:
+sudo apt update && sudo apt install ffmpeg
+
+# macOS:
+brew install ffmpeg
+
+# 4. Install PM2 (opsional)
+sudo npm install -g pm2
+
+# 5. Copy file template
+cp users.json.example users.json
+cp license_config.json.example license_config.json
+cp telegram_config.json.example telegram_config.json
+cp stream_mapping.json.example stream_mapping.json
+cp live_streams.json.example live_streams.json
+cp video_database.json.example video_database.json
+cp thumbnail_database.json.example thumbnail_database.json
+cp schedule_config.json.example schedule_config.json
+cp stream_timers.json.example stream_timers.json
+
+# 6. Buat direktori yang diperlukan
+mkdir -p videos thumbnails tokens ffmpeg_logs
+
+# 7. Buat file Excel jadwal kosong
+python3 create_empty_excel.py
+
+# 8. Setup Google OAuth (Wajib!)
+# Download client_secret.json dari Google Cloud Console
+# Simpan di root direktori proyek
+```
+
+Untuk instruksi manual lengkap, lihat **[SETUP.md](SETUP.md)**
+
+## 🔧 Konfigurasi
+
+### File Template yang Tersedia
+
+Repository menyediakan file template dengan ekstensi `.example`:
+
+```bash
+# Copy otomatis semua file template
+for file in *.example; do cp "$file" "${file%.example}"; done
+
+# Atau biarkan install.sh yang menangani
 ./install.sh
 ```
 
-**Required files:**
-- `client_secret.json` - Google OAuth (download from Google Cloud Console)
-- `users.json` - Auto-created from template
-- `telegram_config.json` - Optional, for notifications
-- `license_credentials.json` - Optional, for license system
+**File template yang tersedia:**
+- `users.json.example` → `users.json`
+- `license_config.json.example` → `license_config.json`
+- `telegram_config.json.example` → `telegram_config.json`
+- `stream_mapping.json.example` → `stream_mapping.json`
+- `live_streams.json.example` → `live_streams.json`
+- `video_database.json.example` → `video_database.json`
+- `thumbnail_database.json.example` → `thumbnail_database.json`
+- `schedule_config.json.example` → `schedule_config.json`
+- `stream_timers.json.example` → `stream_timers.json`
 
-See **[SETUP.md](SETUP.md)** for detailed configuration instructions.
+### Google OAuth Setup (Wajib)
+
+Download `client_secret.json` dari Google Cloud Console:
+
+1. Buka https://console.cloud.google.com
+2. Buat project baru atau gunakan yang sudah ada
+3. Aktifkan **YouTube Data API v3**
+4. Buat **OAuth 2.0 Client ID** (Application type: Web application)
+5. Download credentials → Simpan sebagai `client_secret.json` di root project
+
+Panduan lengkap: **[SETUP.md](SETUP.md)**
 
 ## 🔐 Default Login
 
@@ -73,16 +152,37 @@ See **[SETUP.md](SETUP.md)** for detailed configuration instructions.
 
 ⚠️ **Change password immediately after first login!**
 
-## 📚 Documentation
+## 📖 Langkah-Langkah Setup
 
-- **[SETUP.md](SETUP.md)** - Detailed setup instructions
-- **[SECURITY.md](SECURITY.md)** - Security best practices
-- **[USER_GUIDE.md](USER_GUIDE.md)** - User manual
-- **[FEATURES.md](FEATURES.md)** - Complete feature list
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Production deployment guide
-- **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)** - Telegram bot setup
-- **[TELEGRAM_TROUBLESHOOTING.md](TELEGRAM_TROUBLESHOOTING.md)** - Telegram troubleshooting
-- **[LICENSE_APPSCRIPT_SETUP.md](LICENSE_APPSCRIPT_SETUP.md)** - License system setup
+### 1. Clone Repository
+```bash
+git clone https://github.com/zahraku123/jadwalstream.git
+cd jadwalstream
+```
+
+### 2. Jalankan Installer
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+### 3. Setup Google OAuth (Wajib)
+- Buka [Google Cloud Console](https://console.cloud.google.com)
+- Buat OAuth 2.0 Client ID
+- Download sebagai `client_secret.json`
+- Letakkan di root project
+
+### 4. Login & Aktivasi Lisensi
+- Buka browser: `http://localhost:5000`
+- Login: **admin** / **admin123**
+- Pergi ke menu **License**
+- Hubungi penjual untuk mendapatkan license key
+- Masukkan license key dan aktivasi
+
+### 5. Mulai Streaming!
+- Tambahkan akun YouTube via menu **Settings**
+- Buat jadwal atau mulai live streaming
+- Monitor stream secara real-time
 
 ## 🌐 Access
 
