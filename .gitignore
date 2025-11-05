@@ -36,7 +36,6 @@ desktop.ini
 # ===== Credentials & Sensitive Files (CRITICAL!) =====
 # Google API credentials
 # client_secret.json - ALLOWED for easier setup
-license_credentials.json
 *.json.bak
 
 # OAuth tokens
@@ -48,7 +47,6 @@ token.json
 # License system files (contains customer data)
 license_cache.json
 license_config.json
-lisensi.json
 
 # User authentication data
 users.json
@@ -94,12 +92,12 @@ live_stream_data_updated.xlsx
 # ===== Build & Dependencies =====
 # Node modules
 node_modules/
-package-lock.json
 
 # Python dependencies
 *.egg-info/
 dist/
 build/
+.eggs/
 
 # ===== Backup & Temporary Files =====
 backup/
@@ -109,10 +107,15 @@ backup/
 *~
 *.swp
 *.swo
+*.old
+
+# Bash scripts (keep examples)
+backup_and_upload.sh
 
 # ===== Process Management =====
 .pm2/
 *.pid
+*.sock
 
 # ===== Test & Development =====
 test_*.py
@@ -121,5 +124,10 @@ test_*.py
 .coverage
 htmlcov/
 
-# ===== Tailwind (Windows executable) =====
+# ===== Tailwind & Static Build =====
 tailwindcss.exe
+static/css/output.css
+
+# ===== Apps Script (optional deployment files) =====
+apps_script/.clasp.json
+apps_script/appsscript.json

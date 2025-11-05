@@ -201,15 +201,15 @@ setup_environment() {
         read -p "Press Enter when ready to continue..."
     fi
     
-    # Check for license_credentials.json
-    if [ ! -f "license_credentials.json" ]; then
-        print_warning "license_credentials.json not found!"
-        echo "License system requires Google Sheets credentials."
-        echo "See SETUP.md for detailed instructions"
-        read -p "Do you have license_credentials.json? (y/n): " -n 1 -r
+    # Check for license_config.json
+    if [ ! -f "license_config.json" ]; then
+        print_warning "license_config.json not found!"
+        echo "License system requires proper configuration."
+        echo "See LICENSE_APPSCRIPT_SETUP.md for detailed instructions"
+        read -p "Do you have license_config.json? (y/n): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "You can set this up later."
+            print_info "You can set this up later. Template will be created."
         fi
     fi
 }
@@ -270,9 +270,15 @@ print_final_info() {
     echo ""
     print_warning "Remember to:"
     echo "  1. Setup client_secret.json for Google OAuth"
-    echo "  2. Setup license_credentials.json for license system"
-    echo "  3. Configure telegram_config.json for notifications"
-    echo "  4. Change default admin password"
+    echo "  2. Setup license_config.json for license system (optional)"
+    echo "  3. Configure telegram_config.json for notifications (optional)"
+    echo "  4. Change default admin password immediately!"
+    echo "  5. Add YouTube account tokens via Settings menu"
+    echo ""
+    print_info "For detailed setup instructions, see:"
+    echo "  - SETUP.md (main setup guide)"
+    echo "  - LICENSE_APPSCRIPT_SETUP.md (license system)"
+    echo "  - TELEGRAM_SETUP.md (telegram notifications)"
     echo ""
 }
 

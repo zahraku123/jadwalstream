@@ -78,9 +78,11 @@ See **[SETUP.md](SETUP.md)** for detailed configuration instructions.
 - **[SETUP.md](SETUP.md)** - Detailed setup instructions
 - **[SECURITY.md](SECURITY.md)** - Security best practices
 - **[USER_GUIDE.md](USER_GUIDE.md)** - User manual
-- **[FEATURES.md](FEATURES.md)** - Feature list
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Production deployment
+- **[FEATURES.md](FEATURES.md)** - Complete feature list
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Production deployment guide
 - **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)** - Telegram bot setup
+- **[TELEGRAM_TROUBLESHOOTING.md](TELEGRAM_TROUBLESHOOTING.md)** - Telegram troubleshooting
+- **[LICENSE_APPSCRIPT_SETUP.md](LICENSE_APPSCRIPT_SETUP.md)** - License system setup
 
 ## 🌐 Access
 
@@ -169,45 +171,47 @@ pm2 startup
 - **Zero-downtime reload**: Reload aplikasi tanpa downtime
 - **Cluster mode**: Bisa menjalankan multiple instances (jika diperlukan)
 
-## 🔑 Panduan Token YouTube Manual
+## 🔑 YouTube Multi-Account Support
 
-### Menggunakan `buatoken.py`
-Script untuk membuat token OAuth YouTube secara manual:
+Aplikasi ini mendukung multiple akun YouTube dengan token terpisah. Token disimpan di folder `tokens/`.
 
-```bash
-# Jalankan script
-python buatoken.py
-```
+### Menambah Token YouTube Baru:
+1. Login ke aplikasi sebagai admin
+2. Buka menu **"Settings"** → **"YouTube Accounts"**
+3. Klik **"Add New Account"**
+4. Ikuti proses OAuth authorization
+5. Token akan tersimpan otomatis di `tokens/channel_name.json`
 
-### Langkah-langkah:
-1. **Masukkan nama token** (contoh: `channel1.json`)
-2. **Buka URL otorisasi** yang ditampilkan di browser
-3. **Login dan berikan izin** ke aplikasi
-4. **Salin kode otorisasi** dari URL redirect yang gagal
-5. **Paste kode** ke terminal
-6. Token akan tersimpan sebagai file JSON
-
-### Menggunakan Token di Excel
-Buka file `live_stream_data.xlsx` dan isi kolom:
-- `title`: Judul livestream
-- `description`: Deskripsi
-- `scheduledStartTime`: Format `YYYY-MM-DDTHH:MM`
-- `tokenFile`: Nama file token (contoh: `channel1.json`)
+### Menggunakan Token untuk Schedule:
+- Setiap livestream dapat menggunakan token berbeda
+- Pilih token saat membuat/edit jadwal livestream
+- Mendukung unlimited YouTube accounts
 
 ## 📁 Struktur File Penting
 
 ```
 jadwalstream/
-├── app.py                    # Aplikasi Flask utama
-├── live.py                   # Logika penjadwalan YouTube
-├── buatoken.py              # Generator token manual
-├── requirements.txt         # Dependencies Python
-├── client_secret.json       # Kredensial Google OAuth
-├── live_stream_data.xlsx    # Data jadwal livestream
-├── templates/               # Template HTML
-├── videos/                  # Folder video lokal
-├── stream_mapping.json      # Mapping stream keys
-└── *.json                   # File token YouTube
+├── app.py                      # Aplikasi Flask utama
+├── live.py                     # Logika penjadwalan YouTube
+├── kunci.py                    # Helper untuk YouTube API
+├── user_auth.py                # Sistem autentikasi user
+├── license_validator.py        # Validasi lisensi
+├── hwid.py                     # Hardware ID generator
+├── telegram_notifier.py        # Notifikasi Telegram
+├── requirements.txt            # Dependencies Python
+├── client_secret.json          # Kredensial Google OAuth
+├── live_stream_data.xlsx       # Data jadwal livestream
+├── users.json                  # Database users
+├── license_config.json         # Konfigurasi lisensi
+├── telegram_config.json        # Konfigurasi Telegram
+├── stream_mapping.json         # Mapping stream keys
+├── live_streams.json           # Status stream aktif
+├── templates/                  # Template HTML
+├── static/                     # CSS, JS, assets
+├── videos/                     # Folder video lokal
+├── thumbnails/                 # Folder thumbnail
+├── tokens/                     # Folder token YouTube
+└── ffmpeg_logs/                # Log FFmpeg
 ```
 
 ## 🔧 Troubleshooting
