@@ -1,104 +1,366 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12 text-center mb-4">
-        <h1>YouTube Live Scheduler</h1>
-        <p class="lead">Manage your YouTube live streams and scheduling with ease</p>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <i class="fas fa-calendar fa-3x text-primary mb-3"></i>
-                <h5 class="card-title">Live Stream Schedules</h5>
-                <p class="card-text">Create and manage your YouTube live stream schedules. Set up new streams or use existing ones.</p>
-                <a href="{{ url_for('schedules') }}" class="btn btn-primary">
-                    <i class="fas fa-list"></i> View Schedules
-                </a>
-            </div>
-        </div>
-    </div>
+<!-- Dashboard Header -->
+<div class="cyber-banner mb-6">
+    <!-- Scan lines effect -->
+    <div class="scan-lines"></div>
     
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <i class="fas fa-key fa-3x text-success mb-3"></i>
-                <h5 class="card-title">Channel Tokens</h5>
-                <p class="card-text">Generate and manage YouTube API tokens for different channels. Each channel needs its own token.</p>
-                <a href="{{ url_for('tokens') }}" class="btn btn-success">
-                    <i class="fas fa-plus-circle"></i> Manage Tokens
-                </a>
-            </div>
+    <div class="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between">
+        <div class="text-white">
+            <h1 class="text-2xl md:text-4xl font-bold mb-2 font-mono flex items-center">
+                <i class="fas fa-terminal text-cyan-400 mr-2 md:mr-3 text-xl md:text-3xl"></i>
+                <span class="text-cyan-400">STREAM</span> <span class="hidden sm:inline">COMMAND</span> CENTER
+            </h1>
+            <p class="text-slate-400 text-xs md:text-base">Real-time monitoring & control</p>
         </div>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <i class="fas fa-clock fa-3x text-warning mb-3"></i>
-                <h5 class="card-title">Auto Scheduling</h5>
-                <p class="card-text">Set up automatic scheduling times for when the system should check and create live streams.</p>
-                <a href="{{ url_for('auto_schedule') }}" class="btn btn-warning">
-                    <i class="fas fa-cog"></i> Configure Times
-                </a>
-            </div>
+        <div class="text-white mt-4 md:mt-0 md:text-right">
+            <div class="text-2xl md:text-3xl font-mono text-cyan-400" id="current-time">00:00:00</div>
+            <div class="text-xs md:text-sm text-slate-500 font-mono" id="current-date">YYYY-MM-DD</div>
         </div>
     </div>
 </div>
 
-<div class="row mt-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-info text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-info-circle"></i> Quick Stats
-                </h5>
-            </div>
-            <div class="card-body">
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Pending Schedules
-                        <span class="badge bg-warning rounded-pill">{{ schedules|selectattr('success', 'equalto', false)|list|length if schedules else 0 }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Completed Streams
-                        <span class="badge bg-success rounded-pill">{{ schedules|selectattr('success', 'equalto', true)|list|length if schedules else 0 }}</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Available Tokens
-                        <span class="badge bg-primary rounded-pill">{{ tokens|length if tokens else 0 }}</span>
-                    </li>
-                </ul>
+<!-- Quick Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+    <!-- Total Jadwal -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm uppercase tracking-wider font-mono mb-2">Total Jadwal</p>
+                    <h3 class="text-4xl font-bold text-white counter" id="total-schedules">0</h3>
+                </div>
+                <div class="cyber-icon">
+                    <i class="fas fa-calendar-alt text-purple-400 text-2xl"></i>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-tools"></i> Quick Actions
-                </h5>
+    <!-- Live Sekarang -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm uppercase tracking-wider font-mono mb-2">Live Sekarang</p>
+                    <h3 class="text-4xl font-bold text-white counter" id="active-streams">0</h3>
+                </div>
+                <div class="cyber-icon">
+                    <i class="fas fa-broadcast-tower text-red-400 text-2xl animate-pulse"></i>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="d-grid gap-2">
-                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addScheduleModal">
-                        <i class="fas fa-plus"></i> New Live Stream Schedule
-                    </button>
-                    <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#createTokenModal">
-                        <i class="fas fa-key"></i> Generate New Token
-                    </button>
-                    <form action="{{ url_for('run_scheduler') }}" method="POST" class="d-grid">
-                        <button type="submit" class="btn btn-outline-warning">
-                            <i class="fas fa-play"></i> Run Scheduler Now
-                        </button>
-                    </form>
+        </div>
+    </div>
+
+    <!-- Video Library -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm uppercase tracking-wider font-mono mb-2">Video Library</p>
+                    <h3 class="text-4xl font-bold text-white counter" id="total-videos">0</h3>
+                </div>
+                <div class="cyber-icon">
+                    <i class="fas fa-video text-cyan-400 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Durasi Hari Ini -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm uppercase tracking-wider font-mono mb-2">Durasi Hari Ini</p>
+                    <h3 class="text-4xl font-bold text-white counter">
+                        <span id="today-duration">0</span> <span class="text-lg text-slate-400">min</span>
+                    </h3>
+                </div>
+                <div class="cyber-icon">
+                    <i class="fas fa-clock text-green-400 text-2xl"></i>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- System Monitoring -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+    <!-- CPU Usage -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <h6 class="text-xs font-semibold text-cyan-400 mb-2 flex items-center uppercase tracking-wider font-mono">
+                <i class="fas fa-microchip mr-2"></i> CPU
+            </h6>
+            <div class="flex justify-center">
+                <canvas id="cpuChart" width="90" height="90"></canvas>
+            </div>
+            <div class="mt-2 text-center">
+                <h4 class="text-xl font-bold text-white" id="cpu-value">0%</h4>
+                <small class="text-xs text-slate-400 font-mono" id="cpu-cores">0 Cores</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Memory Usage -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <h6 class="text-xs font-semibold text-purple-400 mb-2 flex items-center uppercase tracking-wider font-mono">
+                <i class="fas fa-memory mr-2"></i> RAM
+            </h6>
+            <div class="flex justify-center">
+                <canvas id="memoryChart" width="90" height="90"></canvas>
+            </div>
+            <div class="mt-2 text-center">
+                <h4 class="text-xl font-bold text-white" id="memory-value">0%</h4>
+                <small class="text-xs text-slate-400 font-mono" id="memory-info">0 / 0 GB</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Disk Usage -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <h6 class="text-xs font-semibold text-green-400 mb-2 flex items-center uppercase tracking-wider font-mono">
+                <i class="fas fa-hdd mr-2"></i> DISK
+            </h6>
+            <div class="flex justify-center">
+                <canvas id="diskChart" width="90" height="90"></canvas>
+            </div>
+            <div class="mt-2 text-center">
+                <h4 class="text-xl font-bold text-white" id="disk-value">0%</h4>
+                <small class="text-xs text-slate-400 font-mono" id="disk-info">0 / 0 GB</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Speed -->
+    <div class="cyber-card group">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <h6 class="text-sm font-semibold text-yellow-400 mb-4 flex items-center uppercase tracking-wider font-mono">
+                <i class="fas fa-network-wired mr-2"></i> Network Speed
+            </h6>
+            <div class="mt-8 space-y-4">
+                <div class="text-center">
+                    <i class="fas fa-arrow-down text-green-400 mb-1"></i>
+                    <h5 class="text-xl font-bold text-white font-mono" id="download-speed">0 KB/s</h5>
+                    <small class="text-slate-400 uppercase tracking-wider text-xs">Download</small>
+                </div>
+                <div class="text-center border-t border-cyan-500/20 pt-4">
+                    <i class="fas fa-arrow-up text-cyan-400 mb-1"></i>
+                    <h5 class="text-xl font-bold text-white font-mono" id="upload-speed">0 KB/s</h5>
+                    <small class="text-slate-400 uppercase tracking-wider text-xs">Upload</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Log & Quick Actions -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Activity Log -->
+    <div class="lg:col-span-2 cyber-card">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <div class="border-b border-cyan-500/20 px-6 py-4">
+                <h5 class="text-lg font-semibold text-white font-mono">
+                    <i class="fas fa-terminal mr-2 text-cyan-400"></i> TERMINAL LOG
+                </h5>
+            </div>
+            <div class="p-6 max-h-[400px] overflow-y-auto">
+                <div id="activity-log">
+                    <div class="text-center text-slate-400 py-8">
+                        <div class="spinner mx-auto mb-3"></div>
+                        <p class="font-mono text-sm">Loading activities...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="cyber-card">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <div class="border-b border-cyan-500/20 px-6 py-4">
+                <h5 class="text-lg font-semibold text-white font-mono">
+                    <i class="fas fa-bolt mr-2 text-yellow-400"></i> QUICK ACCESS
+                </h5>
+            </div>
+            <div class="p-6">
+                <div class="flex flex-col gap-3">
+                    <a href="{{ url_for('schedules') }}" class="cyber-btn primary w-full block">
+                        <i class="fas fa-calendar-plus mr-2"></i>
+                        <span>Jadwal Baru</span>
+                    </a>
+                    <a href="{{ url_for('live_streams') }}" class="cyber-btn danger w-full block">
+                        <i class="fas fa-broadcast-tower mr-2"></i>
+                        <span>Live Streaming</span>
+                    </a>
+                    <a href="{{ url_for('stream_keys') }}" class="cyber-btn secondary w-full block">
+                        <i class="fas fa-key mr-2"></i>
+                        <span>Stream Keys</span>
+                    </a>
+                    <a href="{{ url_for('video_gallery') }}" class="cyber-btn secondary w-full block">
+                        <i class="fas fa-video mr-2"></i>
+                        <span>Video Gallery</span>
+                    </a>
+                    <a href="{{ url_for('tokens') }}" class="cyber-btn secondary w-full block">
+                        <i class="fas fa-coins mr-2"></i>
+                        <span>Token Manager</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+// Initialize charts
+let cpuChart, memoryChart, diskChart;
+
+// Create doughnut chart
+function createDoughnutChart(ctx, label, color) {
+    return new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: [color, '#e2e8f0'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            cutout: '75%',
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            }
+        }
+    });
+}
+
+// Initialize system monitoring charts
+document.addEventListener('DOMContentLoaded', function() {
+    cpuChart = createDoughnutChart(document.getElementById('cpuChart').getContext('2d'), 'CPU', '#0ea5e9');
+    memoryChart = createDoughnutChart(document.getElementById('memoryChart').getContext('2d'), 'Memory', '#ec4899');
+    diskChart = createDoughnutChart(document.getElementById('diskChart').getContext('2d'), 'Disk', '#06b6d4');
+    
+    // Update time
+    updateTime();
+    setInterval(updateTime, 1000);
+    
+    // Load initial data
+    updateSystemStats();
+    updateDashboardStats();
+    updateActivityLog();
+    
+    // Auto refresh every 3 seconds
+    setInterval(updateSystemStats, 3000);
+    setInterval(updateDashboardStats, 5000);
+    setInterval(updateActivityLog, 10000);
+});
+
+// Update time display
+function updateTime() {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateStr = now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    document.getElementById('current-time').textContent = timeStr;
+    document.getElementById('current-date').textContent = dateStr;
+}
+
+// Update system stats
+function updateSystemStats() {
+    fetch('/api/system-stats')
+        .then(response => response.json())
+        .then(data => {
+            // CPU
+            cpuChart.data.datasets[0].data = [data.cpu.percent, 100 - data.cpu.percent];
+            cpuChart.update('none');
+            document.getElementById('cpu-value').textContent = data.cpu.percent.toFixed(1) + '%';
+            document.getElementById('cpu-cores').textContent = data.cpu.count + ' Cores';
+            
+            // Memory
+            memoryChart.data.datasets[0].data = [data.memory.percent, 100 - data.memory.percent];
+            memoryChart.update('none');
+            document.getElementById('memory-value').textContent = data.memory.percent.toFixed(1) + '%';
+            document.getElementById('memory-info').textContent = data.memory.used + ' / ' + data.memory.total + ' GB';
+            
+            // Disk
+            diskChart.data.datasets[0].data = [data.disk.percent, 100 - data.disk.percent];
+            diskChart.update('none');
+            document.getElementById('disk-value').textContent = data.disk.percent.toFixed(1) + '%';
+            document.getElementById('disk-info').textContent = data.disk.used + ' / ' + data.disk.total + ' GB';
+            
+            // Network
+            document.getElementById('download-speed').textContent = data.network.download + ' KB/s';
+            document.getElementById('upload-speed').textContent = data.network.upload + ' KB/s';
+        })
+        .catch(error => console.error('Error fetching system stats:', error));
+}
+
+// Update dashboard stats
+function updateDashboardStats() {
+    fetch('/api/dashboard-stats')
+        .then(response => response.json())
+        .then(data => {
+            // Quick stats
+            document.getElementById('total-schedules').textContent = data.schedules.total;
+            document.getElementById('active-streams').textContent = data.streams.active;
+            document.getElementById('total-videos').textContent = data.videos;
+            document.getElementById('today-duration').textContent = data.today_duration;
+        })
+        .catch(error => console.error('Error fetching dashboard stats:', error));
+}
+
+// Update activity log
+function updateActivityLog() {
+    fetch('/api/activity-log')
+        .then(response => response.json())
+        .then(data => {
+            const logDiv = document.getElementById('activity-log');
+            if (data.length === 0) {
+                logDiv.innerHTML = '<div class="text-center text-slate-500 py-8"><i class="fas fa-inbox text-3xl mb-3"></i><p>Tidak ada aktivitas</p></div>';
+                return;
+            }
+            
+            let html = '';
+            data.forEach(activity => {
+                const activityClass = activity.type === 'live' ? 'activity-live' : 
+                                     activity.type === 'completed' ? 'activity-completed' : 'activity-scheduled';
+                const iconColor = activity.type === 'live' ? 'text-red-400' : 
+                                 activity.type === 'completed' ? 'text-green-400' : 'text-sky-400';
+                html += `
+                    <div class="mb-3 p-4 activity-item ${activityClass} border-l-4 rounded-r-lg">
+                        <div class="flex items-center">
+                            <span class="text-2xl mr-3 ${iconColor}">${activity.icon}</span>
+                            <div class="flex-1">
+                                <div class="font-semibold text-white">${activity.title}</div>
+                                <div class="text-sm text-slate-400">${activity.action} • ${activity.time}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            logDiv.innerHTML = html;
+        })
+        .catch(error => console.error('Error fetching activity log:', error));
+}
+</script>
 {% endblock %}

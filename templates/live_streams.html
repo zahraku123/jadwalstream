@@ -1,0 +1,329 @@
+{% extends 'base.html' %}
+
+{% block title %}Live Streaming{% endblock %}
+
+{% block content %}
+<div x-data="{ showForm: false, customRtmp: false, videoPreview: false, thumbnailSrc: '' }">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="mb-4">
+            <h1 class="text-2xl md:text-3xl font-bold text-white font-mono flex items-center flex-wrap">
+                <i class="fas fa-broadcast-tower text-red-400 mr-3"></i>
+                <span class="text-cyan-400">LIVE</span> 
+                <span class="ml-2">STREAMING</span>
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">Manage your RTMP streaming schedules</p>
+        </div>
+        <button @click="showForm = !showForm" 
+                :class="showForm ? 'cyber-btn danger' : 'cyber-btn primary'"
+                class="transition-all w-full sm:w-auto">
+            <i :class="showForm ? 'fas fa-times' : 'fas fa-plus'" class="mr-2"></i>
+            <span x-text="showForm ? 'Cancel' : 'Add New Schedule'"></span>
+        </button>
+    </div>
+    
+    <!-- Schedule Form -->
+    <div x-show="showForm" 
+         x-collapse
+         class="mb-6">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="bg-sky-500 text-white px-6 py-4">
+                <h5 class="text-lg font-semibold">Schedule New Live Stream</h5>
+            </div>
+            <div class="p-6">
+                <form action="{{ url_for('add_live_stream') }}" method="post" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Left Column -->
+                        <div class="space-y-4">
+                            <!-- Title -->
+                            <div class="cyber-input-group">
+                                <label class="cyber-label">
+                                    <i class="fas fa-heading mr-2"></i>Judul Live
+                                </label>
+                                <input type="text" name="title" required class="cyber-input" placeholder="Enter stream title...">
+                            </div>
+                            
+                            <!-- Start Date -->
+                            <div class="cyber-input-group">
+                                <label class="cyber-label">
+                                    <i class="far fa-calendar mr-2"></i>Tanggal Mulai
+                                </label>
+                                <input type="datetime-local" name="start_date" required class="cyber-input">
+                            </div>
+                            
+                            <!-- RTMP Server -->
+                            <div class="cyber-input-group">
+                                <label class="cyber-label">
+                                    <i class="fas fa-server mr-2"></i>Server RTMP
+                                </label>
+                                <select name="rtmp_server" required
+                                        @change="customRtmp = ($event.target.value === 'custom')"
+                                        class="cyber-input">
+                                    <option value="youtube">YouTube</option>
+                                    <option value="facebook">Facebook</option>
+                                    <option value="instagram">Instagram</option>
+                                    <option value="twitch">Twitch</option>
+                                    <option value="tiktok">TikTok</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Custom RTMP -->
+                            <div x-show="customRtmp" x-collapse class="cyber-input-group">
+                                <label class="cyber-label">
+                                    <i class="fas fa-link mr-2"></i>Custom RTMP URL
+                                </label>
+                                <input type="text" name="custom_rtmp" class="cyber-input" placeholder="rtmp://...">
+                            </div>
+                        </div>
+                        
+                        <!-- Right Column -->
+                        <div class="space-y-4">
+                            <!-- Stream Key -->
+                            <div class="cyber-input-group">
+                                <label class="cyber-label">
+                                    <i class="fas fa-key mr-2"></i>Kunci Stream
+                                </label>
+                                {% if stream_mapping %}
+                                <select name="stream_key" required class="cyber-input">
+                                    <option value="">-- Select Stream Key --</option>
+                                    {% for token, streams in stream_mapping.items() %}
+                                        {% for stream_id, meta in streams.items() %}
+                                            {% if meta and 'cdn' in meta and 'ingestionInfo' in meta['cdn'] and 'streamName' in meta['cdn']['ingestionInfo'] %}
+                                            <option value="{{ meta['cdn']['ingestionInfo']['streamName'] }}">
+                                                {{ meta['title'] if meta and 'title' in meta else stream_id }} - {{ token }}
+                                            </option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endfor %}
+                                </select>
+                                {% else %}
+                                <input type="text" name="stream_key" required class="cyber-input" placeholder="Enter stream key manually...">
+                                <p class="text-xs text-yellow-400 mt-1">
+                                    <i class="fas fa-info-circle mr-1"></i>No stream keys available. Please fetch from Stream Keys page or enter manually.
+                                </p>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Video Selection -->
+                            <div class="cyber-input-group">
+                                <label class="cyber-label">
+                                    <i class="fas fa-video mr-2"></i>Pilih Video
+                                </label>
+                                <select name="video_file" required
+                                        @change="handleVideoChange($event)"
+                                        class="cyber-input">
+                                    <option value="">-- Pilih Video --</option>
+                                    {% for video in videos %}
+                                    <option value="{{ video.filename }}" data-thumbnail="{{ video.thumbnail if video.thumbnail else '' }}">{{ video.title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <!-- Video Preview -->
+                            <div x-show="videoPreview" x-collapse class="text-center">
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Preview Video</label>
+                                <img :src="thumbnailSrc" alt="Video thumbnail" 
+                                     class="mx-auto max-h-40 rounded-lg border border-slate-200">
+                            </div>
+                            
+                            <!-- Duration -->
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Durasi Live (menit)</label>
+                                <input type="number" name="duration" min="1" value="60"
+                                       class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
+                                <p class="text-sm text-slate-500 mt-1">Masukkan durasi live streaming dalam menit (kosongkan untuk tidak dibatasi)</p>
+                            </div>
+                            
+                            <!-- Repeat Daily -->
+                            <div class="flex items-center">
+                                <input type="checkbox" name="repeat_daily" id="repeat_daily"
+                                       class="w-4 h-4 text-sky-500 border-slate-300 rounded focus:ring-sky-500">
+                                <label for="repeat_daily" class="ml-2 text-sm text-slate-700">
+                                    Ulangi setiap hari pada jam yang sama
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end">
+                        <button type="submit"
+                                class="px-6 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-medium transition-colors">
+                            Jadwalkan Live Stream
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Streams Grid -->
+    <div class="cyber-card mb-6">
+        <div class="cyber-border"></div>
+        <div class="relative z-10">
+            <div class="px-6 py-4 border-b border-cyan-500/20">
+                <h3 class="text-lg font-semibold text-white font-mono">
+                    <i class="fas fa-list mr-2 text-cyan-400"></i>
+                    STREAM SCHEDULES
+                </h3>
+            </div>
+        </div>
+    </div>
+        
+        {% if streams and streams|length > 0 %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for stream in streams %}
+        <div class="stream-card">
+            <!-- Status Badge -->
+            <div class="absolute top-4 right-4 z-10">
+                {% if stream.status == 'scheduled' %}
+                <span class="status-badge scheduled">
+                    <i class="far fa-clock"></i> SCHEDULED
+                </span>
+                {% elif stream.status == 'live' %}
+                <span class="status-badge live">
+                    <span class="pulse-dot"></span> LIVE
+                </span>
+                {% elif stream.status == 'completed' %}
+                <span class="status-badge completed">
+                    <i class="fas fa-check"></i> COMPLETED
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Content -->
+            <div class="p-6">
+                <h3 class="text-xl font-bold text-white mb-3 pr-24">{{ stream.title }}</h3>
+                
+                <!-- Stream Info -->
+                <div class="space-y-2 mb-4">
+                    <div class="flex items-center text-sm">
+                        <i class="far fa-clock text-cyan-400 w-5 mr-2"></i>
+                        <span class="text-slate-300 font-mono text-xs">{{ stream.start_date }}</span>
+                    </div>
+                    <div class="flex items-center text-sm">
+                        <i class="fas fa-server text-purple-400 w-5 mr-2"></i>
+                        <span class="text-slate-300">{{ stream.rtmp_server }}</span>
+                    </div>
+                    <div class="flex items-center text-sm">
+                        <i class="fas fa-video text-green-400 w-5 mr-2"></i>
+                        <span class="text-slate-300 truncate">{{ stream.video_title }}</span>
+                    </div>
+                    {% if stream.duration %}
+                    <div class="flex items-center text-sm">
+                        <i class="fas fa-hourglass-half text-yellow-400 w-5 mr-2"></i>
+                        <span class="text-slate-300">{{ stream.duration }} menit</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Badges -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    {% if stream.repeat_daily %}
+                    <span class="badge-cyber green">
+                        <i class="fas fa-redo-alt mr-1 text-xs"></i> DAILY
+                    </span>
+                    {% endif %}
+                </div>
+
+                <!-- Actions -->
+                <div class="flex gap-2">
+                    {% if stream.status == 'scheduled' %}
+                    <a href="{{ url_for('start_live_stream_now', stream_id=stream.id) }}" 
+                       class="cyber-btn-sm primary flex-1">
+                        <i class="fas fa-play mr-1"></i> Start
+                    </a>
+                    {% elif stream.status == 'completed' %}
+                    <a href="{{ url_for('start_live_stream_now', stream_id=stream.id) }}" 
+                       class="cyber-btn-sm primary flex-1">
+                        <i class="fas fa-redo mr-1"></i> Restart
+                    </a>
+                    {% elif stream.status == 'live' %}
+                    <a href="{{ url_for('cancel_live_stream', stream_id=stream.id, action='stop') }}" 
+                       class="cyber-btn-sm danger flex-1">
+                        <i class="fas fa-stop mr-1"></i> Stop
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('edit_live_stream', stream_id=stream.id) }}" 
+                       class="cyber-btn-sm secondary">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <a href="{{ url_for('cancel_live_stream', stream_id=stream.id, action='delete') }}" 
+                       onclick="return confirm('Apakah Anda yakin ingin menghapus jadwal ini?')"
+                       class="cyber-btn-sm danger">
+                        <i class="fas fa-trash"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="cyber-card">
+        <div class="cyber-border"></div>
+        <div class="relative z-10 p-8 text-center">
+            <i class="fas fa-broadcast-tower text-5xl text-slate-600 mb-4"></i>
+            <p class="text-slate-400 font-mono">Belum ada jadwal live stream. Silakan tambahkan jadwal baru.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    function handleVideoChange(event) {
+        const selectedOption = event.target.options[event.target.selectedIndex];
+        const thumbnailFilename = selectedOption.getAttribute('data-thumbnail');
+        
+        // Using Alpine.js magic to update component data
+        const component = event.target.closest('[x-data]').__x.$data;
+        
+        if (thumbnailFilename && thumbnailFilename !== '' && thumbnailFilename !== 'None') {
+            component.thumbnailSrc = '/thumbnails/' + thumbnailFilename;
+            component.videoPreview = true;
+        } else {
+            component.videoPreview = false;
+        }
+    }
+    
+    // Auto-refresh page every 10 seconds to update stream status
+    // Only refresh if no form is open
+    let autoRefreshInterval;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('[LIVE STREAMS] Auto-refresh enabled (every 10 seconds)');
+        
+        autoRefreshInterval = setInterval(function() {
+            // Check if form is not open (to avoid losing user input)
+            const alpineData = document.querySelector('[x-data]').__x.$data;
+            
+            if (!alpineData.showForm) {
+                console.log('[LIVE STREAMS] Refreshing page to update status...');
+                // Store scroll position
+                const scrollY = window.scrollY;
+                sessionStorage.setItem('scrollPosition', scrollY);
+                
+                // Reload page
+                window.location.reload();
+            } else {
+                console.log('[LIVE STREAMS] Skipping refresh - form is open');
+            }
+        }, 10000); // 10 seconds
+    });
+    
+    // Restore scroll position after reload
+    window.addEventListener('load', function() {
+        const scrollPosition = sessionStorage.getItem('scrollPosition');
+        if (scrollPosition) {
+            window.scrollTo(0, parseInt(scrollPosition));
+            sessionStorage.removeItem('scrollPosition');
+        }
+    });
+    
+    // Clean up interval on page unload
+    window.addEventListener('beforeunload', function() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+    });
+</script>
+{% endblock %}

@@ -1,135 +1,232 @@
-# Jadwal Stream
+# JadwalStream — Multi-Platform Live Streaming Scheduler
 
-A Flask-based web application for managing YouTube live stream schedules with automated scheduling capabilities.
+Aplikasi web Flask untuk mengelola jadwal livestream YouTube dan streaming video lokal ke berbagai platform RTMP (YouTube, Facebook, Instagram, Twitch, TikTok).
 
-## Features
+## ✨ Features
 
-- Create and manage YouTube live stream schedules
-- Automated stream scheduling
-- YouTube token management
-- Stream key management
-- Customizable auto-scheduling times
-- Thumbnail management
-- Privacy settings control
-- Integration with YouTube API
+- 📺 Multi-platform streaming (YouTube, Facebook, Instagram, Twitch, TikTok)
+- ⏰ Automated scheduling with timezone support
+- 👥 Multi-user system with role-based access control
+- 🔐 License validation system
+- 📱 Telegram notifications
+- 🎬 Video & thumbnail management
+- 📊 Real-time streaming status monitoring
+- 🔑 Multiple YouTube account support
 
-## Prerequisites
+## 🚀 Quick Start (5 Minutes!)
 
-- Python 3.7 or higher
-- Google account with YouTube streaming enabled
-- `client_secret.json` file from Google Cloud Console (YouTube Data API v3)
-
-## Required Python Modules
+### Auto Installation
 
 ```bash
-pip install -r requirements.txt
-```
-
-Contents for requirements.txt:
-```
-flask
-pandas
-pytz
-google-auth-oauthlib
-schedule
-openpyxl
-```
-
-## Installation Steps
-
-1. Clone the repository:
-```bash
-git clone https://github.com/zahraku123/jadwalstream.git
+# 1. Clone repository
+git clone <your-repo-url>
 cd jadwalstream
+
+# 2. Run installer
+chmod +x install.sh
+./install.sh
 ```
 
-2. Install the required dependencies:
+The installer will:
+- ✅ Check all dependencies
+- ✅ Install Python packages
+- ✅ Install FFmpeg & PM2 (if needed)
+- ✅ Copy template files
+- ✅ Guide you through setup
+- ✅ Start the application
+
+### Manual Installation
+
+See **[SETUP.md](SETUP.md)** for detailed manual setup instructions.
+
+## 📋 Prerequisites
+
+- **Python 3.10+**
+- **FFmpeg** (for streaming)
+- **PM2** (optional, for process management)
+- **Google OAuth credentials** - See [SETUP.md](SETUP.md)
+
+## 🔧 Configuration Files
+
+After cloning, you'll need to setup configuration files:
+
 ```bash
+# Template files are provided, just copy them:
+cp *.example <actual-filename>
+
+# Or let install.sh do it automatically
+./install.sh
+```
+
+**Required files:**
+- `client_secret.json` - Google OAuth (download from Google Cloud Console)
+- `users.json` - Auto-created from template
+- `telegram_config.json` - Optional, for notifications
+- `license_credentials.json` - Optional, for license system
+
+See **[SETUP.md](SETUP.md)** for detailed configuration instructions.
+
+## 🔐 Default Login
+
+- **Username**: `admin`
+- **Password**: `admin123`
+
+⚠️ **Change password immediately after first login!**
+
+## 📚 Documentation
+
+- **[SETUP.md](SETUP.md)** - Detailed setup instructions
+- **[SECURITY.md](SECURITY.md)** - Security best practices
+- **[USER_GUIDE.md](USER_GUIDE.md)** - User manual
+- **[FEATURES.md](FEATURES.md)** - Feature list
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Production deployment
+- **[TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)** - Telegram bot setup
+
+## 🌐 Access
+
+Open browser: `http://localhost:5000`
+
+For VPS/remote access: `http://your-server-ip:5000`
+
+## 📦 Instalasi FFmpeg
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update && sudo apt install ffmpeg
+```
+
+**Windows:**
+1. Download dari https://ffmpeg.org/download.html
+2. Extract dan tambahkan ke PATH
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+## 🔧 Manajemen Aplikasi dengan PM2
+
+### Perintah PM2 Dasar
+```bash
+# Start aplikasi
+pm2 start app.py --name jadwalstream --interpreter python
+
+# Stop aplikasi
+pm2 stop jadwalstream
+
+# Restart aplikasi
+pm2 restart jadwalstream
+
+# Lihat status semua aplikasi
+pm2 list
+
+# Lihat log real-time
+pm2 logs jadwalstream
+
+# Lihat log dengan filter
+pm2 logs jadwalstream --lines 100
+
+# Hapus aplikasi dari PM2
+pm2 delete jadwalstream
+
+# Monitor resource usage
+pm2 monit
+```
+
+### Setup Auto-Start saat Boot
+```bash
+# Simpan konfigurasi PM2 saat ini
+pm2 save
+
+# Setup startup script
+pm2 startup
+# Jalankan perintah yang ditampilkan oleh PM2
+
+# Untuk menghapus auto-start
+pm2 unstartup
+```
+
+### Deployment Production
+```bash
+# Pindahkan aplikasi ke direktori deployment
+sudo mkdir -p /opt/jadwalstream
+sudo cp -r . /opt/jadwalstream/
+cd /opt/jadwalstream
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Jalankan dengan PM2
+pm2 start app.py --name jadwalstream --interpreter python
+pm2 save
+pm2 startup
 ```
 
-3. Set up Google OAuth:
-   - Go to Google Cloud Console
-   - Enable YouTube Data API v3
-   - Create OAuth 2.0 credentials
-   - Download the credentials and save as `client_secret.json` in the project root directory
+### Keuntungan PM2
+- **Tidak mengganggu stream_loop**: PM2 mengelola proses secara independen
+- **Auto-restart**: Otomatis restart jika aplikasi crash
+- **Monitoring**: Built-in monitoring dan log management
+- **Zero-downtime reload**: Reload aplikasi tanpa downtime
+- **Cluster mode**: Bisa menjalankan multiple instances (jika diperlukan)
 
-## Configuration Files
+## 🔑 Panduan Token YouTube Manual
 
-The application uses several configuration files:
+### Menggunakan `buatoken.py`
+Script untuk membuat token OAuth YouTube secara manual:
 
-- `client_secret.json`: Google OAuth credentials
-- `schedule_config.json`: Auto-scheduling time configurations
-- `stream_mapping.json`: Stream key mappings
-- `scheduler_status.json`: Scheduler status tracking
-- `live_stream_data.xlsx`: Main schedule database
-
-## Running the Application
-
-1. Ensure all configuration files are in place
-
-2. Start the Flask application:
 ```bash
-python app.py
+# Jalankan script
+python buatoken.py
 ```
 
-3. Access the application:
-   - Open a web browser and navigate to `http://localhost:5000`
-   - For network access, use `http://<your-ip>:5000`
+### Langkah-langkah:
+1. **Masukkan nama token** (contoh: `channel1.json`)
+2. **Buka URL otorisasi** yang ditampilkan di browser
+3. **Login dan berikan izin** ke aplikasi
+4. **Salin kode otorisasi** dari URL redirect yang gagal
+5. **Paste kode** ke terminal
+6. Token akan tersimpan sebagai file JSON
 
-## Application Structure
+### Menggunakan Token di Excel
+Buka file `live_stream_data.xlsx` dan isi kolom:
+- `title`: Judul livestream
+- `description`: Deskripsi
+- `scheduledStartTime`: Format `YYYY-MM-DDTHH:MM`
+- `tokenFile`: Nama file token (contoh: `channel1.json`)
 
-- `/templates`: HTML templates for the web interface
-- `/thumbnails`: Directory for stream thumbnail storage
-- `app.py`: Main application file
-- `live.py`: YouTube live streaming functionality
-- `kunci.py`: Stream key management
-- Other supporting Python modules for specific functionalities
+## 📁 Struktur File Penting
 
-## Features Usage
+```
+jadwalstream/
+├── app.py                    # Aplikasi Flask utama
+├── live.py                   # Logika penjadwalan YouTube
+├── buatoken.py              # Generator token manual
+├── requirements.txt         # Dependencies Python
+├── client_secret.json       # Kredensial Google OAuth
+├── live_stream_data.xlsx    # Data jadwal livestream
+├── templates/               # Template HTML
+├── videos/                  # Folder video lokal
+├── stream_mapping.json      # Mapping stream keys
+└── *.json                   # File token YouTube
+```
 
-### Token Management
-- Create new YouTube API tokens
-- Delete existing tokens
-- View available tokens
+## 🔧 Troubleshooting
 
-### Stream Management
-- Create new stream schedules
-- Edit existing schedules
-- Delete schedules
-- Configure auto-start and auto-stop
-- Set privacy status
-- Upload thumbnails
+### Error Umum:
+- **ModuleNotFoundError**: Install dependencies dengan `pip install -r requirements.txt`
+- **FFmpeg not found**: Install FFmpeg dan pastikan ada di PATH
+- **Token gagal**: Periksa `client_secret.json` dan akses YouTube Data API v3
+- **PM2 tidak start**: Cek dengan `pm2 logs jadwalstream` untuk error details
 
-### Auto-Scheduling
-- Configure schedule check times
-- Enable/disable auto-scheduling
-- View scheduler status
-- Manual schedule execution
+### Cek Status:
+```bash
+# Cek FFmpeg
+ffmpeg -version
 
-## Important Notes
+# Cek status PM2
+pm2 status jadwalstream
 
-1. Ensure your Google account has YouTube streaming enabled
-2. Keep your `client_secret.json` secure and never share it
-3. The application stores tokens in JSON files - keep them secure
-4. The scheduler runs every minute to check for scheduled streams
-5. All times are handled in Asia/Jakarta timezone by default
+# Lihat log error
+pm2 logs jadwalstream --err --lines 50
+```
 
-## Error Handling
-
-- The application includes comprehensive error logging
-- Check the console output for detailed error messages
-- Flask debug mode is enabled by default for development
-
-## Security Considerations
-
-- Keep all JSON token files secure
-- Don't expose the application to the public internet without proper security measures
-- Use environment variables for sensitive configurations in production
-
-## Customization
-
-You can customize various aspects of the application:
-- Modify `TIMEZONE` in `app.py` to change the default timezone
-- Adjust scheduler check intervals in the scheduler thread
-- Customize the web interface through the templates

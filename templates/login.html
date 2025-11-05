@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - JadwalStream</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/dark-theme.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/cyber-additions.css') }}" rel="stylesheet">
+    <style>
+        body { 
+            background: linear-gradient(180deg, #0a0e27 0%, #1a0f2e 100%);
+            background-attachment: fixed;
+        }
+    </style>
+</head>
+<body class="h-full text-slate-300 dark flex items-center justify-center p-4">
+    <!-- Animated Grid Background -->
+    <div class="cyber-grid"></div>
+    
+    <div class="w-full max-w-md relative z-10">
+        <div class="cyber-card">
+            <div class="cyber-border"></div>
+            <div class="relative z-10">
+                <!-- Login Header -->
+                <div class="text-center p-8 border-b border-cyan-500/20">
+                    <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4 cyber-icon">
+                        <i class="fas fa-terminal text-4xl text-cyan-400"></i>
+                    </div>
+                    <h2 class="text-3xl font-bold font-mono text-white mb-2">
+                        <span class="text-cyan-400">JADWAL</span>STREAM
+                    </h2>
+                    <p class="text-slate-400">Access Control Terminal</p>
+                </div>
+                
+                <!-- Login Body -->
+                <div class="p-8">
+                    <!-- Flash Messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            <div class="mb-6 space-y-2">
+                                {% for category, message in messages %}
+                                    {% if category == 'error' or category == 'danger' %}
+                                        <div class="cyber-toast error" style="position: relative; top: 0; right: 0; margin-bottom: 0.5rem;">
+                                            <i class="fas fa-exclamation-circle mr-3"></i>
+                                            <span>{{ message }}</span>
+                                        </div>
+                                    {% elif category == 'success' %}
+                                        <div class="cyber-toast success" style="position: relative; top: 0; right: 0; margin-bottom: 0.5rem;">
+                                            <i class="fas fa-check-circle mr-3"></i>
+                                            <span>{{ message }}</span>
+                                        </div>
+                                    {% else %}
+                                        <div class="bg-blue-500/10 border border-blue-500/30 p-4 rounded-lg">
+                                            <div class="flex items-center">
+                                                <i class="fas fa-info-circle text-cyan-400 mr-3"></i>
+                                                <p class="text-sm text-cyan-300">{{ message }}</p>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endwith %}
+
+                    <!-- Login Form -->
+                    <form method="POST" action="{{ url_for('login') }}" class="space-y-6">
+                        <!-- Username -->
+                        <div class="cyber-input-group">
+                            <label for="username" class="cyber-label">
+                                <i class="fas fa-user mr-2"></i>Username
+                            </label>
+                            <input type="text" id="username" name="username" required autofocus
+                                   class="cyber-input"
+                                   placeholder="Enter username...">
+                        </div>
+                        
+                        <!-- Password -->
+                        <div class="cyber-input-group">
+                            <label for="password" class="cyber-label">
+                                <i class="fas fa-lock mr-2"></i>Password
+                            </label>
+                            <input type="password" id="password" name="password" required
+                                   class="cyber-input"
+                                   placeholder="Enter password...">
+                        </div>
+                        
+                        <!-- Remember Me -->
+                        <div class="flex items-center">
+                            <input type="checkbox" id="remember" name="remember"
+                                   class="w-4 h-4 text-cyan-500 border-cyan-500/30 bg-dark-card rounded focus:ring-cyan-500">
+                            <label for="remember" class="ml-2 text-sm text-slate-300">
+                                Remember me
+                            </label>
+                        </div>
+                        
+                        <!-- Submit Button -->
+                        <button type="submit" class="cyber-btn primary w-full">
+                            <i class="fas fa-sign-in-alt mr-2"></i> ACCESS SYSTEM
+                        </button>
+                    </form>
+                    
+                    <!-- Register Link -->
+                    <div class="mt-6 text-center">
+                        <p class="text-slate-400 text-sm">
+                            Don't have access? 
+                            <a href="{{ url_for('register') }}" class="text-cyan-400 hover:text-cyan-300 font-semibold">
+                                Register Now
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Default Credentials Info -->
+        <div class="mt-6 text-center">
+            <p class="text-slate-500 text-xs font-mono">
+                Default: admin / admin123
+            </p>
+        </div>
+    </div>
+</body>
+</html>

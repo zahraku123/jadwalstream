@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - JadwalStream</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/dark-theme.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/cyber-additions.css') }}" rel="stylesheet">
+    <style>
+        body { 
+            background: linear-gradient(180deg, #0a0e27 0%, #1a0f2e 100%);
+            background-attachment: fixed;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-300 dark flex items-center justify-center px-4">
+    <!-- Animated Grid Background -->
+    <div class="cyber-grid"></div>
+    
+    <div class="w-full max-w-md relative z-10">
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <a href="{{ url_for('home') }}" class="inline-flex items-center text-white logo-glitch">
+                <i class="fas fa-terminal text-cyan-400 text-3xl mr-2"></i>
+                <span class="text-2xl font-bold font-mono">
+                    <span class="text-cyan-400">JADWAL</span>STREAM
+                </span>
+            </a>
+            <p class="text-slate-400 mt-2 font-mono text-sm">CREATE NEW ACCOUNT</p>
+        </div>
+
+        <div class="cyber-card">
+            <div class="cyber-border"></div>
+            <div class="relative z-10 p-8">
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    <div class="space-y-2 mb-6">
+                      {% for category, message in messages %}
+                        {% if category == 'success' %}
+                          <div class="bg-green-500/10 border border-green-500/30 p-3 rounded-lg">
+                            <div class="flex items-center">
+                                <i class="fas fa-check-circle text-green-400 mr-2"></i>
+                                <p class="text-sm text-green-400">{{ message }}</p>
+                            </div>
+                          </div>
+                        {% elif category in ['error','danger'] %}
+                          <div class="bg-red-500/10 border border-red-500/30 p-3 rounded-lg">
+                            <div class="flex items-center">
+                                <i class="fas fa-exclamation-circle text-red-400 mr-2"></i>
+                                <p class="text-sm text-red-400">{{ message }}</p>
+                            </div>
+                          </div>
+                        {% elif category == 'warning' %}
+                          <div class="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg">
+                            <div class="flex items-center">
+                                <i class="fas fa-exclamation-triangle text-yellow-400 mr-2"></i>
+                                <p class="text-sm text-yellow-400">{{ message }}</p>
+                            </div>
+                          </div>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                {% endwith %}
+
+                <!-- Register Form -->
+                <form action="{{ url_for('register') }}" method="POST" class="space-y-6">
+                    <!-- Username -->
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-user mr-2"></i>Username
+                        </label>
+                        <input type="text" name="username" required 
+                               class="cyber-input" 
+                               placeholder="Choose username...">
+                    </div>
+                    
+                    <!-- Password -->
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-lock mr-2"></i>Password
+                        </label>
+                        <input type="password" name="password" required 
+                               class="cyber-input" 
+                               placeholder="Enter password...">
+                    </div>
+                    
+                    <!-- Confirm Password -->
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-check-circle mr-2"></i>Konfirmasi Password
+                        </label>
+                        <input type="password" name="confirm" required 
+                               class="cyber-input" 
+                               placeholder="Confirm password...">
+                    </div>
+                    
+                    <!-- Submit Button -->
+                    <button type="submit" class="cyber-btn primary w-full">
+                        <i class="fas fa-user-plus mr-2"></i> CREATE ACCOUNT
+                    </button>
+                </form>
+
+                <!-- Login Link -->
+                <div class="mt-6 text-center">
+                    <p class="text-slate-400 text-sm">
+                        Sudah punya akun? 
+                        <a href="{{ url_for('login') }}" class="text-cyan-400 hover:text-cyan-300 font-semibold">
+                            Login di sini
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Info -->
+        <div class="mt-6 text-center">
+            <p class="text-slate-500 text-xs font-mono">
+                Default role: DEMO (preview only)
+            </p>
+        </div>
+    </div>
+</body>
+</html>

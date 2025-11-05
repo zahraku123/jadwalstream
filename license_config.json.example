@@ -1,0 +1,4 @@
+{
+  "apps_script_url": "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec",
+  "admin_api_key": "YOUR_SECRET_API_KEY_HERE"
+}

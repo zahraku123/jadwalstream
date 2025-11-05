@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JadwalStream — YouTube Streaming Automation Platform</title>
+    <meta name="description" content="Platform otomasi streaming YouTube dengan scheduling, RTMP streaming, multi-account support, dan Telegram notifications">
+    <link href="{{ url_for('static', filename='css/output.css') }}" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/dark-theme.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/cyber-additions.css') }}" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        body { 
+            background: linear-gradient(180deg, #0a0e27 0%, #1a0f2e 100%);
+            background-attachment: fixed;
+        }
+        .feature-card {
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body class="h-full text-slate-300" x-data="{ mobileMenu: false }">
+    <!-- Animated Grid Background -->
+    <div class="cyber-grid"></div>
+    
+    <!-- Navigation -->
+    <nav class="glass-panel border-b border-cyan-500/20 relative z-50 sticky top-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo -->
+                <div class="flex items-center logo-glitch">
+                    <i class="fas fa-terminal text-cyan-400 text-2xl mr-2"></i>
+                    <span class="text-xl font-bold font-mono text-white">
+                        <span class="text-cyan-400">JADWAL</span>STREAM
+                    </span>
+                </div>
+                
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="text-slate-300 hover:text-cyan-400 transition-colors font-mono text-sm">Features</a>
+                    <a href="#cta" class="text-slate-300 hover:text-cyan-400 transition-colors font-mono text-sm">Get Started</a>
+                </div>
+                
+                <!-- CTA Buttons -->
+                <div class="hidden md:flex items-center space-x-3">
+                    <a href="{{ url_for('login') }}" class="cyber-btn secondary">
+                        <i class="fas fa-sign-in-alt mr-2"></i> Login
+                    </a>
+                    <a href="{{ url_for('register') }}" class="cyber-btn primary">
+                        <i class="fas fa-user-plus mr-2"></i> Register
+                    </a>
+                </div>
+                
+                <!-- Mobile Menu Button -->
+                <button @click="mobileMenu = !mobileMenu" class="md:hidden text-white">
+                    <i class="fas" :class="mobileMenu ? 'fa-times' : 'fa-bars'"></i>
+                </button>
+            </div>
+            
+            <!-- Mobile Menu -->
+            <div x-show="mobileMenu" 
+                 x-transition
+                 class="md:hidden py-4 border-t border-cyan-500/20">
+                <div class="flex flex-col space-y-3">
+                    <a href="#features" @click="mobileMenu = false" class="text-slate-300 hover:text-cyan-400 transition-colors font-mono text-sm">Features</a>
+                    <a href="#cta" @click="mobileMenu = false" class="text-slate-300 hover:text-cyan-400 transition-colors font-mono text-sm">Get Started</a>
+                    <hr class="border-cyan-500/20">
+                    <a href="{{ url_for('login') }}" class="cyber-btn secondary w-full justify-center">
+                        <i class="fas fa-sign-in-alt mr-2"></i> Login
+                    </a>
+                    <a href="{{ url_for('register') }}" class="cyber-btn primary w-full justify-center">
+                        <i class="fas fa-user-plus mr-2"></i> Register
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative overflow-hidden z-10 py-16 lg:py-24">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid lg:grid-cols-2 gap-12 items-center">
+                <!-- Left Column -->
+                <div>
+                    <div class="inline-flex items-center px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/30 mb-6">
+                        <span class="pulse-dot"></span>
+                        <span class="text-sm text-cyan-400 ml-2 font-mono uppercase tracking-wider">150+ Features • Production Ready</span>
+                    </div>
+                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight font-mono leading-tight mb-6">
+                        <span class="text-cyan-400">YOUTUBE</span><br/>
+                        STREAMING<br/>
+                        <span class="text-purple-400">AUTOMATION</span>
+                    </h1>
+                    <p class="text-slate-300 text-lg leading-relaxed mb-8">
+                        Platform lengkap untuk automasi streaming YouTube dengan 
+                        <span class="text-cyan-400 font-semibold">auto-scheduling</span>, 
+                        <span class="text-purple-400 font-semibold">RTMP streaming</span>, 
+                        <span class="text-green-400 font-semibold">multi-account</span>, dan 
+                        <span class="text-blue-400 font-semibold">Telegram notifications</span>.
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-4 mb-8">
+                        <a href="{{ url_for('login') }}" class="cyber-btn primary text-lg px-8 py-4 w-full sm:w-auto justify-center">
+                            <i class="fas fa-rocket mr-2"></i> GET STARTED
+                        </a>
+                        <a href="#features" class="cyber-btn secondary text-lg px-8 py-4 w-full sm:w-auto justify-center">
+                            <i class="fas fa-info-circle mr-2"></i> LEARN MORE
+                        </a>
+                    </div>
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <div class="flex items-center text-green-400">
+                            <i class="fas fa-check-circle mr-2"></i>
+                            <span class="font-mono">YouTube API v3</span>
+                        </div>
+                        <div class="flex items-center text-blue-400">
+                            <i class="fas fa-check-circle mr-2"></i>
+                            <span class="font-mono">OAuth 2.0 Secure</span>
+                        </div>
+                        <div class="flex items-center text-purple-400">
+                            <i class="fas fa-check-circle mr-2"></i>
+                            <span class="font-mono">Multi-Platform</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right Column - Feature Preview Cards -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="cyber-card feature-card">
+                        <div class="cyber-border"></div>
+                        <div class="relative z-10 p-6">
+                            <div class="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
+                                <i class="fas fa-calendar-check text-purple-400 text-2xl"></i>
+                            </div>
+                            <h3 class="text-white font-semibold mb-2 font-mono text-sm">Auto Schedule</h3>
+                            <p class="text-slate-400 text-xs">Schedule YouTube streams automatically with repeat daily</p>
+                        </div>
+                    </div>
+                    
+                    <div class="cyber-card feature-card">
+                        <div class="cyber-border"></div>
+                        <div class="relative z-10 p-6">
+                            <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
+                                <i class="fas fa-broadcast-tower text-red-400 text-2xl"></i>
+                            </div>
+                            <h3 class="text-white font-semibold mb-2 font-mono text-sm">RTMP Streaming</h3>
+                            <p class="text-slate-400 text-xs">Stream to multiple platforms with FFmpeg</p>
+                        </div>
+                    </div>
+                    
+                    <div class="cyber-card feature-card">
+                        <div class="cyber-border"></div>
+                        <div class="relative z-10 p-6">
+                            <div class="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center mb-4">
+                                <i class="fas fa-key text-yellow-400 text-2xl"></i>
+                            </div>
+                            <h3 class="text-white font-semibold mb-2 font-mono text-sm">Multi-Account</h3>
+                            <p class="text-slate-400 text-xs">Manage multiple YouTube accounts with ease</p>
+                        </div>
+                    </div>
+                    
+                    <div class="cyber-card feature-card">
+                        <div class="cyber-border"></div>
+                        <div class="relative z-10 p-6">
+                            <div class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mb-4">
+                                <i class="fab fa-telegram text-blue-400 text-2xl"></i>
+                            </div>
+                            <h3 class="text-white font-semibold mb-2 font-mono text-sm">Notifications</h3>
+                            <p class="text-slate-400 text-xs">Real-time Telegram alerts for all events</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="py-12 border-y border-cyan-500/20 relative z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div class="text-center">
+                    <div class="text-3xl md:text-5xl font-bold text-cyan-400 font-mono mb-2">150+</div>
+                    <div class="text-slate-400 text-xs md:text-sm font-mono uppercase tracking-wider">Features</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl md:text-5xl font-bold text-purple-400 font-mono mb-2">10</div>
+                    <div class="text-slate-400 text-xs md:text-sm font-mono uppercase tracking-wider">Modules</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl md:text-5xl font-bold text-green-400 font-mono mb-2">24/7</div>
+                    <div class="text-slate-400 text-xs md:text-sm font-mono uppercase tracking-wider">Automation</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl md:text-5xl font-bold text-yellow-400 font-mono mb-2">∞</div>
+                    <div class="text-slate-400 text-xs md:text-sm font-mono uppercase tracking-wider">Streams</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Features Section -->
+    <section id="features" class="py-16 lg:py-24 relative z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold text-white font-mono mb-4">
+                    <span class="text-cyan-400">KEY</span> FEATURES
+                </h2>
+                <p class="text-slate-400 max-w-2xl mx-auto">
+                    Powerful automation tools untuk YouTube streaming professional
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Feature 1 -->
+                <div class="cyber-card feature-card">
+                    <div class="cyber-border"></div>
+                    <div class="relative z-10 p-6">
+                        <div class="flex items-center mb-4">
+                            <div class="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mr-4">
+                                <i class="fas fa-calendar text-purple-400 text-xl"></i>
+                            </div>
+                            <h4 class="text-white font-semibold font-mono">YouTube Scheduling</h4>
+                        </div>
+                        <ul class="text-slate-400 text-sm space-y-2">
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Auto-create schedules</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Repeat daily feature</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Auto start/stop</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Thumbnail support</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="cyber-card feature-card">
+                    <div class="cyber-border"></div>
+                    <div class="relative z-10 p-6">
+                        <div class="flex items-center mb-4">
+                            <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mr-4">
+                                <i class="fas fa-video text-red-400 text-xl"></i>
+                            </div>
+                            <h4 class="text-white font-semibold font-mono">RTMP Streaming</h4>
+                        </div>
+                        <ul class="text-slate-400 text-sm space-y-2">
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>FFmpeg integration</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Multi-platform support</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Custom RTMP config</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Process monitoring</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="cyber-card feature-card">
+                    <div class="cyber-border"></div>
+                    <div class="relative z-10 p-6">
+                        <div class="flex items-center mb-4">
+                            <div class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mr-4">
+                                <i class="fas fa-film text-blue-400 text-xl"></i>
+                            </div>
+                            <h4 class="text-white font-semibold font-mono">Media Library</h4>
+                        </div>
+                        <ul class="text-slate-400 text-sm space-y-2">
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Video gallery</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Thumbnail gallery</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Google Drive import</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Local upload</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="cyber-card feature-card">
+                    <div class="cyber-border"></div>
+                    <div class="relative z-10 p-6">
+                        <div class="flex items-center mb-4">
+                            <div class="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center mr-4">
+                                <i class="fas fa-key text-yellow-400 text-xl"></i>
+                            </div>
+                            <h4 class="text-white font-semibold font-mono">Multi-Account</h4>
+                        </div>
+                        <ul class="text-slate-400 text-sm space-y-2">
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Multiple YouTube accounts</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>OAuth 2.0 secure</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Stream key mapping</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Token management</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Feature 5 -->
+                <div class="cyber-card feature-card">
+                    <div class="cyber-border"></div>
+                    <div class="relative z-10 p-6">
+                        <div class="flex items-center mb-4">
+                            <div class="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center mr-4">
+                                <i class="fab fa-telegram text-cyan-400 text-xl"></i>
+                            </div>
+                            <h4 class="text-white font-semibold font-mono">Telegram Alerts</h4>
+                        </div>
+                        <ul class="text-slate-400 text-sm space-y-2">
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Schedule created</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Stream starting</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Stream ended</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Error notifications</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Feature 6 -->
+                <div class="cyber-card feature-card">
+                    <div class="cyber-border"></div>
+                    <div class="relative z-10 p-6">
+                        <div class="flex items-center mb-4">
+                            <div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mr-4">
+                                <i class="fas fa-chart-line text-green-400 text-xl"></i>
+                            </div>
+                            <h4 class="text-white font-semibold font-mono">Dashboard</h4>
+                        </div>
+                        <ul class="text-slate-400 text-sm space-y-2">
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Real-time stats</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>System monitoring</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Activity log</li>
+                            <li><i class="fas fa-check text-green-400 mr-2"></i>Schedule timeline</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="cta" class="py-16 lg:py-24 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border-y border-cyan-500/20 relative z-10">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h2 class="text-3xl md:text-5xl font-bold text-white font-mono mb-6">
+                READY TO <span class="text-cyan-400">AUTOMATE</span><br/>
+                YOUR <span class="text-purple-400">STREAMING?</span>
+            </h2>
+            <p class="text-slate-300 text-lg mb-8 max-w-2xl mx-auto">
+                Join platform streaming automation terlengkap dengan 150+ fitur untuk mengelola YouTube streaming Anda
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="{{ url_for('register') }}" class="cyber-btn primary text-xl px-10 py-5 w-full sm:w-auto justify-center">
+                    <i class="fas fa-rocket mr-2"></i> START FREE NOW
+                </a>
+                <a href="{{ url_for('login') }}" class="cyber-btn secondary text-xl px-10 py-5 w-full sm:w-auto justify-center">
+                    <i class="fas fa-sign-in-alt mr-2"></i> LOGIN
+                </a>
+            </div>
+            <p class="text-slate-500 text-sm mt-6 font-mono">
+                No credit card required • OAuth 2.0 Secure • Production Ready
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 border-t border-cyan-500/20 relative z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-3 gap-8 mb-8">
+                <!-- Brand -->
+                <div>
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-terminal text-cyan-400 text-2xl mr-2"></i>
+                        <span class="text-xl font-bold font-mono text-white">
+                            <span class="text-cyan-400">JADWAL</span>STREAM
+                        </span>
+                    </div>
+                    <p class="text-slate-400 text-sm">
+                        Platform automasi streaming YouTube dengan teknologi modern dan fitur lengkap.
+                    </p>
+                </div>
+                
+                <!-- Features -->
+                <div>
+                    <h5 class="text-white font-mono font-bold mb-4">FEATURES</h5>
+                    <ul class="text-slate-400 text-sm space-y-2">
+                        <li>• YouTube Scheduling</li>
+                        <li>• RTMP Streaming</li>
+                        <li>• Multi-Account Support</li>
+                        <li>• Telegram Notifications</li>
+                    </ul>
+                </div>
+                
+                <!-- Quick Links -->
+                <div>
+                    <h5 class="text-white font-mono font-bold mb-4">QUICK LINKS</h5>
+                    <ul class="text-slate-400 text-sm space-y-2">
+                        <li><a href="{{ url_for('login') }}" class="hover:text-cyan-400 transition-colors">Login</a></li>
+                        <li><a href="{{ url_for('register') }}" class="hover:text-cyan-400 transition-colors">Register</a></li>
+                        <li><a href="#features" class="hover:text-cyan-400 transition-colors">Features</a></li>
+                        <li><a href="#cta" class="hover:text-cyan-400 transition-colors">Get Started</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="pt-8 border-t border-cyan-500/20 text-center">
+                <p class="text-slate-500 text-sm font-mono">
+                    &copy; 2025 JADWALSTREAM — YouTube Streaming Automation Platform • All Rights Reserved
+                </p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

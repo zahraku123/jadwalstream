@@ -1,51 +1,59 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col-md-8">
-        <h3>Manage Stream Mappings</h3>
-        <p class="text-muted">View, delete or export saved stream mappings per token.</p>
-    </div>
-    <div class="col-md-4 text-end">
-        <form method="POST" action="{{ url_for('export_stream_mapping') }}" style="display:inline;">
-            <button class="btn btn-outline-primary">Export JSON</button>
-        </form>
+<div class="mb-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h3 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Manage Stream Mappings</h3>
+            <p class="text-gray-600 dark:text-gray-400">View, delete or export saved stream mappings per token.</p>
+        </div>
+        <div>
+            <form method="POST" action="{{ url_for('export_stream_mapping') }}">
+                <button class="px-4 py-2 border border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg font-medium transition duration-200 flex items-center">
+                    <i class="fas fa-download mr-2"></i> Export JSON
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 
 {% if stream_mapping %}
     {% for token, streams in stream_mapping.items() %}
-    <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>{{ token }}</strong>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-6 overflow-hidden">
+        <div class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 px-6 py-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+            <strong class="text-lg text-gray-800 dark:text-gray-100">{{ token }}</strong>
             <div>
-                <form method="POST" action="{{ url_for('delete_token_mapping') }}" style="display:inline;">
+                <form method="POST" action="{{ url_for('delete_token_mapping') }}">
                     <input type="hidden" name="token_file" value="{{ token }}" />
-                    <button class="btn btn-sm btn-danger" onclick="return confirm('Delete all mappings for {{ token }}?');">Delete Token</button>
+                    <button class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition duration-200 flex items-center" onclick="return confirm('Delete all mappings for {{ token }}?');">
+                        <i class="fas fa-trash mr-2"></i> Delete Token
+                    </button>
                 </form>
             </div>
         </div>
-        <div class="card-body">
+        <div class="p-6">
             {% if streams %}
-            <div class="table-responsive">
-                <table class="table table-sm">
-                    <thead>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                            <th>Stream Title</th>
-                            <th>Stream ID</th>
-                            <th>Actions</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Stream Title</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Stream ID</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {% for stream_id, meta in streams.items() %}
-                        <tr>
-                            <td>{{ meta['title'] if meta and 'title' in meta else stream_id }}</td>
-                            <td><code>{{ stream_id }}</code></td>
-                            <td>
-                                <form method="POST" action="{{ url_for('delete_stream_mapping') }}" style="display:inline;">
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{{ meta['title'] if meta and 'title' in meta else stream_id }}</td>
+                            <td class="px-4 py-3 text-sm"><code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs text-gray-800 dark:text-gray-200">{{ stream_id }}</code></td>
+                            <td class="px-4 py-3 text-sm">
+                                <form method="POST" action="{{ url_for('delete_stream_mapping') }}">
                                     <input type="hidden" name="token_file" value="{{ token }}" />
                                     <input type="hidden" name="stream_id" value="{{ stream_id }}" />
-                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this stream mapping?');">Delete</button>
+                                    <button class="px-3 py-1 border border-red-600 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-900/30 text-xs font-medium rounded transition duration-200" onclick="return confirm('Delete this stream mapping?');">
+                                        <i class="fas fa-trash mr-1"></i> Delete
+                                    </button>
                                 </form>
                             </td>
                         </tr>
@@ -54,13 +62,15 @@
                 </table>
             </div>
             {% else %}
-            <div class="alert alert-light mb-0">No streams saved for this token.</div>
+            <div class="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-4 py-3 rounded-lg">No streams saved for this token.</div>
             {% endif %}
         </div>
     </div>
     {% endfor %}
 {% else %}
-<div class="alert alert-info">No stream mappings found.</div>
+<div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 px-4 py-3 rounded-lg">
+    <i class="fas fa-info-circle mr-2"></i> No stream mappings found.
+</div>
 {% endif %}
 
 {% endblock %}

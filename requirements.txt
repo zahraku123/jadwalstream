@@ -1,6 +1,31 @@
-flask
-pandas
-pytz
-google-auth-oauthlib
-schedule
-openpyxl
+# Flask Framework
+flask>=2.3.3
+flask-login>=0.6.2
+werkzeug>=2.3.0
+
+# Data Processing
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# Date/Time
+pytz>=2023.3
+
+# Google APIs
+google-auth>=2.22.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.95.0
+
+# Google Sheets Integration
+gspread==5.12.0
+oauth2client==4.1.3
+
+# Scheduling
+schedule>=1.2.0
+
+# System Utilities
+psutil>=5.9.0
+requests>=2.31.0
+
+# Metadata (required for some Python versions)
+packaging>=23.0
+importlib-metadata>=6.0.0

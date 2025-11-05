@@ -1,62 +1,209 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}YouTube Scheduler{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Tailwind CSS - Production Build -->
+    <link href="{{ url_for('static', filename='css/output.css') }}" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/dark-theme.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/cyber-additions.css') }}" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        body { 
+            background: linear-gradient(180deg, #0a0e27 0%, #1a0f2e 100%);
+            background-attachment: fixed;
+        }
+    </style>
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('home') }}">
-                <i class="fab fa-youtube text-danger"></i> YouTube Scheduler
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('schedules') }}">
-                            <i class="fas fa-calendar"></i> Jadwal
+<body class="h-full bg-dark-bg text-slate-300 dark">
+    <!-- Animated Grid Background -->
+    <div class="cyber-grid"></div>
+    
+    <div class="min-h-full relative z-10">
+        <!-- Navbar Top -->
+        <nav class="glass-panel shadow-lg border-b border-cyan-500/20">
+            <div class="mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <!-- Mobile menu button -->
+                        <button type="button" id="mobile-menu-btn" class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-blue transition-colors">
+                            <i class="fas fa-bars text-lg"></i>
+                        </button>
+                        
+                        <!-- Logo -->
+                        <a href="{{ url_for('home') }}" class="flex items-center px-2 logo-glitch">
+                            <i class="fas fa-terminal text-cyan-400 text-2xl mr-2"></i>
+                            <span class="text-xl font-bold font-mono text-white">JADWAL<span class="text-cyan-400">STREAM</span></span>
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('tokens') }}">
-                            <i class="fas fa-key"></i> Token
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('auto_schedule') }}">
-                            <i class="fas fa-clock"></i> Auto Schedule
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('stream_keys') }}">
-                            <i class="fas fa-key"></i> Stream Keys
-                        </a>
-                    </li>
-                </ul>
+                    </div>
+                    
+                    <!-- User menu -->
+                    <div class="flex items-center">
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" type="button" class="flex items-center text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-blue px-3 py-2 hover:bg-slate-700 transition-colors">
+                                <i class="fas fa-user-circle text-accent-blue text-xl mr-2"></i>
+                                <span class="text-slate-200 font-medium">{{ current_user.username }}</span>
+                                <i class="fas fa-chevron-down text-slate-400 text-xs ml-2"></i>
+                            </button>
+                            
+                            <div x-show="open" @click.away="open = false" x-cloak class="origin-top-right absolute right-0 mt-2 w-48 rounded-lg shadow-xl bg-dark-card border border-dark-border">
+                                <div class="py-1">
+                                    <a href="{{ url_for('logout') }}" class="flex items-center px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
+                                        <i class="fas fa-sign-out-alt mr-3 text-accent-red"></i>
+                                        Logout
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </nav>
+
+        <div class="flex h-[calc(100vh-4rem)]">
+            <!-- Sidebar -->
+            <aside id="sidebar" class="hidden md:flex md:flex-shrink-0">
+                <div class="flex flex-col w-64 glass-panel border-r border-cyan-500/20">
+                    <div class="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
+                        <nav class="mt-5 flex-1 px-3 space-y-1">
+                            <a href="{{ url_for('home') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-home mr-3 text-cyan-400 group-hover:text-cyan-300"></i>
+                                <span>Dashboard</span>
+                            </a>
+                            
+                            <a href="{{ url_for('schedules') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-calendar mr-3 text-purple-400 group-hover:text-purple-300"></i>
+                                <span>Jadwal</span>
+                            </a>
+                            
+                            <a href="{{ url_for('live_streams') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-broadcast-tower mr-3 text-red-400 group-hover:text-red-300"></i>
+                                <span>Live Streaming</span>
+                            </a>
+                            
+                            <a href="{{ url_for('video_gallery') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-video mr-3 text-cyan-400 group-hover:text-cyan-300"></i>
+                                <span>Video Gallery</span>
+                            </a>
+                            
+                            <a href="{{ url_for('thumbnail_gallery') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-image mr-3 text-green-400 group-hover:text-green-300"></i>
+                                <span>Thumbnails</span>
+                            </a>
+                            
+                            <div class="pt-4 mt-4 border-t border-dark-border">
+                                <p class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Settings</p>
+                            </div>
+                            
+                            <a href="{{ url_for('tokens') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fas fa-key mr-3 text-accent-yellow group-hover:text-yellow-400"></i>
+                                Token Channel
+                            </a>
+                            
+                            <a href="{{ url_for('stream_keys') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fas fa-stream mr-3 text-accent-blue group-hover:text-accent-cyan"></i>
+                                Stream Keys
+                            </a>
+                            
+                            <a href="{{ url_for('auto_schedule') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fas fa-clock mr-3 text-accent-green group-hover:text-green-400"></i>
+                                Auto Schedule
+                            </a>
+                            
+                            {% if current_user.role == 'admin' %}
+                            <a href="{{ url_for('telegram_settings') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fab fa-telegram mr-3 text-blue-400 group-hover:text-blue-300"></i>
+                                Telegram Notifications
+                            </a>
+                            {% endif %}
+                            
+                            <a href="{{ url_for('license_page') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-key mr-3 text-yellow-400 group-hover:text-yellow-300"></i>
+                                <span>License</span>
+                            </a>
+                            
+                            {% if current_user.is_authenticated and (current_user.role|lower == 'admin') %}
+                            <a href="{{ url_for('admin_users') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fas fa-users-cog mr-3 text-accent-green group-hover:text-green-400"></i>
+                                Manajemen User
+                            </a>
+                            {% endif %}
+                        </nav>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main content -->
+            <main class="flex-1 overflow-y-auto bg-dark-bg">
+                <div class="py-6">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <!-- Flash messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                <div class="mb-6 space-y-3">
+                                    {% for category, message in messages %}
+                                        {% if category == 'success' %}
+                                            <div class="bg-green-500/10 border border-green-500/30 p-4 rounded-lg backdrop-blur-sm">
+                                                <div class="flex">
+                                                    <i class="fas fa-check-circle text-accent-green mt-0.5 mr-3"></i>
+                                                    <p class="text-sm text-green-400">{{ message }}</p>
+                                                </div>
+                                            </div>
+                                        {% elif category == 'error' or category == 'danger' %}
+                                            <div class="bg-red-500/10 border border-red-500/30 p-4 rounded-lg backdrop-blur-sm">
+                                                <div class="flex">
+                                                    <i class="fas fa-exclamation-circle text-accent-red mt-0.5 mr-3"></i>
+                                                    <p class="text-sm text-red-400">{{ message }}</p>
+                                                </div>
+                                            </div>
+                                        {% elif category == 'warning' %}
+                                            <div class="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg backdrop-blur-sm">
+                                                <div class="flex">
+                                                    <i class="fas fa-exclamation-triangle text-accent-yellow mt-0.5 mr-3"></i>
+                                                    <p class="text-sm text-yellow-400">{{ message }}</p>
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            <div class="bg-blue-500/10 border border-blue-500/30 p-4 rounded-lg backdrop-blur-sm">
+                                                <div class="flex">
+                                                    <i class="fas fa-info-circle text-accent-blue mt-0.5 mr-3"></i>
+                                                    <p class="text-sm text-blue-400">{{ message }}</p>
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endwith %}
+                        
+                        <!-- Page content -->
+                        {% block content %}{% endblock %}
+                    </div>
+                </div>
+            </main>
         </div>
-    </nav>
-
-    <div class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        {% block content %}{% endblock %}
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Alpine.js for dropdown -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Mobile sidebar toggle -->
+    <script>
+        document.getElementById('mobile-menu-btn').addEventListener('click', function() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('flex');
+        });
+    </script>
+    
     {% block scripts %}{% endblock %}
 </body>
 </html>

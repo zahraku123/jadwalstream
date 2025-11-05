@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Video Gallery{% endblock %}
+
+{% block content %}
+<div x-data="{ showLocalUpload: false, showDriveUpload: false }">
+    <!-- Cyber Header -->
+    <div class="mb-8">
+        <div class="mb-4">
+            <h1 class="text-2xl md:text-3xl font-bold text-white font-mono flex items-center flex-wrap">
+                <i class="fas fa-film text-purple-400 mr-3"></i>
+                <span class="text-purple-400">VIDEO</span> 
+                <span class="ml-2">GALLERY</span>
+            </h1>
+            <p class="text-slate-400 text-sm mt-1 font-mono">Manage your streaming video library</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button @click="showLocalUpload = !showLocalUpload" 
+                    :class="showLocalUpload ? 'cyber-btn danger' : 'cyber-btn primary'"
+                    class="w-full sm:w-auto">
+                <i :class="showLocalUpload ? 'fas fa-times' : 'fas fa-upload'" class="mr-2"></i>
+                <span x-text="showLocalUpload ? 'CLOSE' : 'UPLOAD LOCAL'"></span>
+            </button>
+            <button @click="showDriveUpload = !showDriveUpload" 
+                    :class="showDriveUpload ? 'cyber-btn danger' : 'cyber-btn success'"
+                    class="w-full sm:w-auto">
+                <i :class="showDriveUpload ? 'fas fa-times' : 'fab fa-google-drive'" class="mr-2"></i>
+                <span x-text="showDriveUpload ? 'CLOSE' : 'UPLOAD DRIVE'"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Upload Forms -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Upload from PC -->
+        <div x-show="showLocalUpload" x-collapse class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-purple-600 to-purple-800">
+                <h5 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fas fa-upload mr-2"></i> UPLOAD FROM LOCAL PC
+                </h5>
+            </div>
+            <div class="cyber-card-body">
+            <form action="{{ url_for('upload_video') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label class="cyber-label">
+                        <i class="fas fa-file-video mr-2"></i>Select Video File
+                    </label>
+                    <input type="file" name="video_file" accept="video/*" required
+                           class="cyber-input">
+                </div>
+                <div>
+                    <label class="cyber-label">
+                        <i class="fas fa-heading mr-2"></i>Video Title
+                    </label>
+                    <input type="text" name="video_title" required
+                           class="cyber-input" placeholder="Enter video title...">
+                </div>
+                <button type="submit" class="cyber-btn primary w-full">
+                    <i class="fas fa-cloud-upload-alt mr-2"></i> UPLOAD VIDEO
+                </button>
+            </form>
+            </div>
+        </div>
+        
+        <!-- Import from Drive -->
+        <div x-show="showDriveUpload" x-collapse class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-green-600 to-green-800">
+                <h5 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fab fa-google-drive mr-2"></i> IMPORT FROM GOOGLE DRIVE
+                </h5>
+            </div>
+            <div class="cyber-card-body">
+            <form action="{{ url_for('import_from_drive') }}" method="post" class="space-y-4">
+                <div>
+                    <label class="cyber-label">
+                        <i class="fas fa-link mr-2"></i>Google Drive Public Link
+                    </label>
+                    <input type="url" name="drive_link" required
+                           class="cyber-input" placeholder="https://drive.google.com/...">
+                </div>
+                <div>
+                    <label class="cyber-label">
+                        <i class="fas fa-heading mr-2"></i>Video Title
+                    </label>
+                    <input type="text" name="drive_video_title" required
+                           class="cyber-input" placeholder="Enter video title...">
+                </div>
+                <button type="submit" class="cyber-btn success w-full">
+                    <i class="fas fa-download mr-2"></i> IMPORT VIDEO
+                </button>
+            </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Gallery -->
+    <div>
+    <div class="flex items-center mb-6">
+        <i class="fas fa-database text-cyan-400 mr-3 text-xl"></i>
+        <h3 class="text-xl font-semibold text-white font-mono">AVAILABLE VIDEOS</h3>
+    </div>
+    {% if videos %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for video in videos %}
+            <div class="cyber-card group">
+                <div class="cyber-card-body p-0">
+                    <!-- Video Preview -->
+                    <div class="relative overflow-hidden">
+                        <video width="100%" controls preload="metadata" class="w-full aspect-video bg-slate-900">
+                            <source src="{{ url_for('serve_video', filename=video.filename) }}">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="absolute top-2 right-2">
+                            <span class="cyber-badge success">
+                                <i class="fas fa-play-circle mr-1"></i>READY
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- Video Info -->
+                    <div class="p-4 space-y-3">
+                        <h5 class="text-lg font-semibold text-white font-mono truncate" title="{{ video.title }}">
+                            {{ video.title }}
+                        </h5>
+                        
+                        <div class="flex items-center text-sm text-slate-400">
+                            <i class="fas fa-calendar-alt mr-2 text-cyan-400"></i>
+                            <span class="font-mono">{{ video.date_added }}</span>
+                        </div>
+                        
+                        <div class="flex items-center text-sm text-slate-400">
+                            <i class="fas fa-file mr-2 text-purple-400"></i>
+                            <code class="cyber-code text-xs">{{ video.filename }}</code>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="border-t border-slate-700 p-4">
+                        <a href="{{ url_for('delete_video', video_id=video.id) }}" 
+                           onclick="return confirm('Are you sure you want to delete this video?')"
+                           class="cyber-btn danger w-full text-center">
+                            <i class="fas fa-trash-alt mr-2"></i> DELETE VIDEO
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="cyber-alert info">
+            <i class="fas fa-info-circle mr-2"></i>
+            No videos available. Upload or import videos to see them here.
+        </div>
+    {% endif %}
+    </div>
+</div>
+{% endblock %}

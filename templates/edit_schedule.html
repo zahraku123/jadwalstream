@@ -1,229 +1,283 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <h2>Edit Schedule</h2>
-            <a href="{{ url_for('schedules') }}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Schedules
-            </a>
-        </div>
+<div class="mb-6">
+    <div class="flex justify-between items-center">
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Edit Schedule</h2>
+        <a href="{{ url_for('schedules') }}" class="inline-flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-200">
+            <i class="fas fa-arrow-left mr-2"></i> Back to Schedules
+        </a>
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-body">
-                <form action="{{ url_for('update_schedule', index=index) }}" method="POST">
-                    <div class="mb-3">
-                        <label class="form-label">Title</label>
-                        <input type="text" class="form-control" name="title" value="{{ schedule.title }}" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-control" name="description" rows="3">{{ schedule.description }}</textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Scheduled Start Time</label>
-                        <input type="datetime-local" class="form-control" name="scheduledStartTime" 
-                               value="{{ schedule.scheduledStartTime }}" required>
-                    </div>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Token File</label>
-                            <select class="form-control" name="tokenFile" id="tokenFileSelect_edit" required>
-                                    {% for token in tokens %}
-                                    <option value="{{ token }}" {% if token == schedule.tokenFile %}selected{% endif %}>
-                                        {{ token }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                        </div>
-                        
-                        <div class="col-md-6">
-                            <label class="form-label">Privacy Status</label>
-                            <select class="form-control" name="privacyStatus">
-                                <option value="unlisted" {% if schedule.privacyStatus == 'unlisted' %}selected{% endif %}>Unlisted</option>
-                                <option value="private" {% if schedule.privacyStatus == 'private' %}selected{% endif %}>Private</option>
-                                <option value="public" {% if schedule.privacyStatus == 'public' %}selected{% endif %}>Public</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-12">
-                            <div class="card">
-                                <div class="card-header">
-                                    Stream Settings
-                                </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" name="useExistingStream" 
-                                                   id="useExistingStream_edit" {% if schedule.useExistingStream %}checked{% endif %}>
-                                            <label class="form-check-label" for="useExistingStream_edit">
-                                                Use Existing Stream
-                                            </label>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="mb-3" id="streamNameSection_edit" style="display: {{ 'block' if schedule.useExistingStream else 'none' }};">
-                                        <label class="form-label">Stream</label>
-                                        <select class="form-control" name="streamNameExisting" id="streamNameSelect_edit">
-                                            <!-- options populated by JS based on selected token -->
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-12">
-                            <div class="card">
-                                <div class="card-header">
-                                    Additional Settings
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="autoStart" 
-                                                       id="autoStart" {% if schedule.autoStart %}checked{% endif %}>
-                                                <label class="form-check-label" for="autoStart">
-                                                    Auto Start
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="autoStop" 
-                                                       id="autoStop" {% if schedule.autoStop %}checked{% endif %}>
-                                                <label class="form-check-label" for="autoStop">
-                                                    Auto Stop
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="madeForKids" 
-                                                       id="madeForKids" {% if schedule.madeForKids %}checked{% endif %}>
-                                                <label class="form-check-label" for="madeForKids">
-                                                    Made for Kids
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="mt-3">
-                                        <label class="form-label">Thumbnail File (Optional)</label>
-                                        <input type="text" class="form-control" name="thumbnailFile" 
-                                               value="{{ schedule.thumbnailFile }}" placeholder="Path to thumbnail file">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="d-flex justify-content-between">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Save Changes
-                        </button>
-                        <a href="{{ url_for('schedules') }}" class="btn btn-secondary">
-                            <i class="fas fa-times"></i> Cancel
-                        </a>
-                    </div>
-                </form>
+<div x-data="editScheduleForm()" x-init="init()">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+        <form action="{{ url_for('update_schedule', index=index) }}" method="POST">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Title</label>
+                <input type="text" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" name="title" value="{{ schedule.title }}" required>
             </div>
-        </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
+                <textarea class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" name="description" rows="3">{{ schedule.description }}</textarea>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Scheduled Start Time</label>
+                <input type="datetime-local" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" name="scheduledStartTime" 
+                       value="{{ schedule.scheduledStartTime }}" required>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Token File</label>
+                    <select class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" name="tokenFile" id="tokenFileSelect_edit" required>
+                        {% for token in tokens %}
+                        <option value="{{ token }}" {% if token == schedule.tokenFile %}selected{% endif %}>
+                            {{ token }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Privacy Status</label>
+                    <select class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" name="privacyStatus">
+                        <option value="unlisted" {% if schedule.privacyStatus == 'unlisted' %}selected{% endif %}>Unlisted</option>
+                        <option value="private" {% if schedule.privacyStatus == 'private' %}selected{% endif %}>Private</option>
+                        <option value="public" {% if schedule.privacyStatus == 'public' %}selected{% endif %}>Public</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+                    <h5 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Stream Settings</h5>
+                    
+                    <div class="mb-4">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="checkbox" x-model="useExistingStream" name="useExistingStream" 
+                                   id="useExistingStream_edit" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" {% if schedule.useExistingStream %}checked{% endif %}>
+                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Use Existing Stream</span>
+                        </label>
+                    </div>
+                    
+                    <div x-show="useExistingStream" x-transition class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Stream</label>
+                        <select class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" name="streamNameExisting" id="streamNameSelect_edit">
+                            <!-- options populated by JS based on selected token -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+                    <h5 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Additional Settings</h5>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" name="autoStart" 
+                                       id="autoStart" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" {% if schedule.autoStart %}checked{% endif %}>
+                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Auto Start</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" name="autoStop" 
+                                       id="autoStop" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" {% if schedule.autoStop %}checked{% endif %}>
+                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Auto Stop</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" name="madeForKids" 
+                                       id="madeForKids" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" {% if schedule.madeForKids %}checked{% endif %}>
+                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Made for Kids</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" name="repeat_daily" 
+                                       id="repeat_daily" class="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500 dark:bg-gray-700 dark:border-gray-600" {% if schedule.repeat_daily %}checked{% endif %}>
+                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300 font-semibold">
+                                    <i class="fas fa-redo mr-1 text-yellow-500"></i>Ulangi Setiap Hari
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Thumbnail (Optional)</label>
+                        <select @change="updateThumbnailPreview()" class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" name="thumbnailFile" id="thumbnailSelect_edit">
+                            <option value="">No thumbnail</option>
+                            {% for thumbnail in thumbnails %}
+                            <option value="{{ thumbnail.filename }}" {% if schedule.thumbnailFile == thumbnail.filename %}selected{% endif %}>
+                                {{ thumbnail.title }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div x-show="showThumbnailPreview" x-transition class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preview</label>
+                        <div class="text-center">
+                            <img id="thumbnailPreviewImg_edit" src="{% if schedule.thumbnailFile and schedule.thumbnailFile != '' %}/thumbnails/{{ schedule.thumbnailFile }}{% endif %}" class="max-h-48 mx-auto border border-gray-300 dark:border-gray-600 rounded-lg">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-between">
+                <button type="submit" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition duration-200 flex items-center">
+                    <i class="fas fa-save mr-2"></i> Save Changes
+                </button>
+                <a href="{{ url_for('schedules') }}" class="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-200 flex items-center">
+                    <i class="fas fa-times mr-2"></i> Cancel
+                </a>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 {% set sm_json = stream_mapping | tojson %}
+{% set stream_id = schedule.streamNameExisting if schedule.streamNameExisting else '' %}
 <script>
 const streamMapping_edit = {{ sm_json | safe }} || {};
+const savedStreamId = '{{ stream_id }}';
 
-// Helper function to get all streams
-function getAllStreams(mapping) {
-    const allStreams = {};
-    // Flatten all streams into one list
-    for (const [token, streams] of Object.entries(mapping)) {
-        Object.entries(streams).forEach(([id, meta]) => {
-            allStreams[id] = meta;
-        });
-    }
-    return allStreams;
-}
-
-// Edit Schedule form handlers
-function populateStreamSelect_Edit(selectedStreamId) {
-    const sel = document.getElementById('streamNameSelect_edit');
-    sel.innerHTML = '';
-    
-    // Add empty option
-    const emptyOpt = document.createElement('option');
-    emptyOpt.value = '';
-    emptyOpt.text = 'Select a stream';
-    sel.appendChild(emptyOpt);
-    
-    // Get all streams
-    const allStreams = getAllStreams(streamMapping_edit);
-    const keys = Object.keys(allStreams);
-    
-    if (keys.length === 0) {
-        sel.disabled = true;
-        return;
-    }
-    
-    sel.disabled = false;
-    // Create array of entries for sorting
-    const entries = keys.map(sid => {
-        const meta = allStreams[sid] || {};
-        return {
-            id: sid,
-            name: meta.title || 'Unnamed Stream'
-        };
-    });
-
-    // Sort by name
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-
-    // Add options
-    for (const entry of entries) {
-        const opt = document.createElement('option');
-        opt.value = entry.id;  // Keep the ID as the value
-        opt.text = entry.name; // Show only the name
-        if (selectedStreamId && selectedStreamId === entry.id) {
-            opt.selected = true;
+function editScheduleForm() {
+    return {
+        useExistingStream: {{ 'true' if schedule.useExistingStream else 'false' }},
+        showThumbnailPreview: {{ 'true' if (schedule.thumbnailFile and schedule.thumbnailFile != '') else 'false' }},
+        
+        init() {
+            console.log('[EDIT] Initializing...');
+            console.log('[EDIT] useExistingStream:', this.useExistingStream);
+            console.log('[EDIT] savedStreamId:', savedStreamId);
+            console.log('[EDIT] streamMapping_edit:', streamMapping_edit);
+            
+            if (this.useExistingStream) {
+                this.populateStreamSelect(savedStreamId);
+            }
+            
+            // Watch for changes to useExistingStream
+            this.$watch('useExistingStream', (value) => {
+                console.log('[EDIT] useExistingStream changed to:', value);
+                if (value) {
+                    this.populateStreamSelect(savedStreamId);
+                }
+            });
+        },
+        
+        getAllStreams(mapping) {
+            const allStreams = {};
+            for (const [token, streams] of Object.entries(mapping)) {
+                if (streams && typeof streams === 'object') {
+                    Object.entries(streams).forEach(([id, meta]) => {
+                        if (meta && meta.title) {
+                            allStreams[id] = {
+                                title: meta.title,
+                                token: token
+                            };
+                        }
+                    });
+                }
+            }
+            return allStreams;
+        },
+        
+        populateStreamSelect(selectedStreamNameOrId) {
+            const sel = document.getElementById('streamNameSelect_edit');
+            if (!sel) {
+                console.error('[EDIT] Stream select element not found');
+                return;
+            }
+            
+            sel.innerHTML = '';
+            
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = '';
+            emptyOpt.text = 'Select a stream...';
+            sel.appendChild(emptyOpt);
+            
+            const allStreams = this.getAllStreams(streamMapping_edit);
+            const keys = Object.keys(allStreams);
+            
+            console.log('[EDIT] populateStreamSelect called');
+            console.log('[EDIT] Found streams:', keys.length);
+            console.log('[EDIT] Looking for stream name or ID:', selectedStreamNameOrId);
+            
+            if (keys.length === 0) {
+                const noStreamOpt = document.createElement('option');
+                noStreamOpt.value = '';
+                noStreamOpt.text = 'No streams available';
+                noStreamOpt.disabled = true;
+                sel.appendChild(noStreamOpt);
+                console.warn('[EDIT] No streams found in mapping');
+                return;
+            }
+            
+            const entries = keys.map(sid => ({
+                id: sid,
+                name: allStreams[sid].title || 'Unnamed Stream',
+                token: allStreams[sid].token || 'unknown'
+            }));
+            
+            entries.sort((a, b) => a.name.localeCompare(b.name));
+            
+            let foundMatch = false;
+            const searchValue = String(selectedStreamNameOrId || '').trim();
+            
+            console.log('[EDIT] Search value:', searchValue);
+            console.log('[EDIT] All stream entries:', entries);
+            
+            for (const entry of entries) {
+                const opt = document.createElement('option');
+                opt.value = entry.id;
+                opt.text = `${entry.name} (${entry.token})`;
+                
+                // Try to match by ID or by name
+                const entryId = String(entry.id).trim();
+                const entryName = String(entry.name).trim();
+                
+                // Check if it matches either the stream ID or the stream name
+                const matchById = searchValue && entryId === searchValue;
+                const matchByName = searchValue && entryName === searchValue;
+                
+                console.log(`[EDIT] Checking: "${entryName}" vs "${searchValue}" | ID: "${entryId}" vs "${searchValue}"`);
+                
+                if (matchById || matchByName) {
+                    opt.selected = true;
+                    foundMatch = true;
+                    console.log('[EDIT] ✓ MATCHED stream:', entry.name, 'with ID:', entry.id, `(matched by ${matchById ? 'ID' : 'name'})`);
+                }
+                sel.appendChild(opt);
+            }
+            
+            if (!foundMatch && selectedStreamNameOrId) {
+                console.warn('[EDIT] ⚠ Stream name/ID not found in mapping:', selectedStreamNameOrId);
+                console.log('[EDIT] Available stream names:', entries.map(e => e.name));
+            }
+        },
+        
+        updateThumbnailPreview() {
+            const sel = document.getElementById('thumbnailSelect_edit');
+            const filename = sel.value;
+            const previewImg = document.getElementById('thumbnailPreviewImg_edit');
+            
+            if (filename) {
+                previewImg.src = '/thumbnails/' + filename;
+                this.showThumbnailPreview = true;
+            } else {
+                this.showThumbnailPreview = false;
+            }
         }
-        sel.appendChild(opt);
-    }
+    };
 }
-
-// Edit form event listeners
-const useChk = document.getElementById('useExistingStream_edit');
-useChk?.addEventListener('change', function() {
-    const section = document.getElementById('streamNameSection_edit');
-    section.style.display = this.checked ? 'block' : 'none';
-    if (this.checked) {
-        populateStreamSelect_Edit('{{ schedule.streamNameExisting }}');
-    }
-});
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    const useExisting = document.getElementById('useExistingStream_edit');
-    
-    if (useExisting?.checked) {
-        populateStreamSelect_Edit('{{ schedule.streamNameExisting }}');
-    }
-});
 </script>
 {% endblock %}

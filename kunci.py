@@ -3,9 +3,14 @@ from googleapiclient.discovery import build
 import json
 import os
 
+# Configuration
+TOKENS_FOLDER = 'tokens'  # Folder for token files
+
 def get_youtube_service(token_file):
     """Membuat service YouTube API dengan token yang diberikan"""
-    creds = Credentials.from_authorized_user_file(token_file, ['https://www.googleapis.com/auth/youtube'])
+    # Construct full path to token file in tokens folder
+    token_path = os.path.join(TOKENS_FOLDER, token_file)
+    creds = Credentials.from_authorized_user_file(token_path, ['https://www.googleapis.com/auth/youtube'])
     return build('youtube', 'v3', credentials=creds)
 
 def get_stream_keys(token_file):

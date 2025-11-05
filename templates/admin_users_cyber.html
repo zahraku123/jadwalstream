@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Manajemen User{% endblock %}
+
+{% block content %}
+<div x-data="{ deleteUser: null, changePasswordUser: null, newPassword: '' }">
+    <!-- Cyber Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-white font-mono flex items-center">
+            <i class="fas fa-users-cog text-purple-400 mr-3"></i>
+            <span class="text-cyan-400">USER</span> MANAGEMENT
+        </h1>
+        <p class="text-slate-400 text-sm mt-1 font-mono">Manage users, roles, and permissions</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Form Tambah User -->
+        <div class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-green-600 to-green-800">
+                <h3 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fas fa-user-plus mr-2"></i> ADD NEW USER
+                </h3>
+            </div>
+            <div class="cyber-card-body">
+                <form action="{{ url_for('admin_users') }}" method="POST" class="space-y-4">
+                    <input type="hidden" name="action" value="create">
+                    
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-user mr-2"></i>Username
+                        </label>
+                        <input type="text" name="username" required class="cyber-input" placeholder="Enter username...">
+                    </div>
+                    
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-lock mr-2"></i>Password
+                        </label>
+                        <input type="password" name="password" required class="cyber-input" placeholder="Enter password...">
+                    </div>
+                    
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-user-shield mr-2"></i>Role
+                        </label>
+                        <select name="role" class="cyber-input">
+                            <option value="demo">Demo (Read Only)</option>
+                            <option value="silver">Silver</option>
+                            <option value="gold">Gold</option>
+                            <option value="platinum">Platinum</option>
+                            <option value="admin">Admin (Full Access)</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="cyber-btn success w-full">
+                        <i class="fas fa-user-plus mr-2"></i> CREATE USER
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- List User -->
+        <div class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-cyan-600 to-cyan-800">
+                <h3 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fas fa-list mr-2"></i> USER LIST
+                </h3>
+            </div>
+            <div class="cyber-card-body">
+                <div class="overflow-x-auto cyber-table-container">
+                    <table class="cyber-table">
+                        <thead>
+                            <tr>
+                                <th><i class="fas fa-user mr-2"></i>USERNAME</th>
+                                <th><i class="fas fa-shield-alt mr-2"></i>ROLE</th>
+                                <th><i class="fas fa-tools mr-2"></i>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for username, data in users.items() %}
+                            <tr>
+                                <td class="font-medium text-white">{{ username }}</td>
+                                <td>
+                                    {% set role = data.get('role', 'demo') %}
+                                    {% if role == 'admin' %}
+                                    <span class="cyber-badge danger">ADMIN</span>
+                                    {% elif role == 'platinum' %}
+                                    <span class="cyber-badge primary">PLATINUM</span>
+                                    {% elif role == 'gold' %}
+                                    <span class="cyber-badge warning">GOLD</span>
+                                    {% elif role == 'silver' %}
+                                    <span class="cyber-badge info">SILVER</span>
+                                    {% else %}
+                                    <span class="cyber-badge secondary">DEMO</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="flex gap-2 flex-wrap">
+                                        <!-- Update Role Form -->
+                                        <form action="{{ url_for('admin_users') }}" method="POST" class="flex items-center gap-2">
+                                            <input type="hidden" name="action" value="update_role">
+                                            <input type="hidden" name="username" value="{{ username }}">
+                                            <select name="role" class="cyber-input-sm text-xs">
+                                                {% for r in ['demo','silver','gold','platinum','admin'] %}
+                                                <option value="{{ r }}" {% if data.get('role', 'demo') == r %}selected{% endif %}>{{ r }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="cyber-btn-sm primary">
+                                                <i class="fas fa-save"></i>
+                                            </button>
+                                        </form>
+                                        
+                                        <!-- Change Password Button -->
+                                        <button @click="changePasswordUser = '{{ username }}'; newPassword = ''" 
+                                                class="cyber-btn-sm warning">
+                                            <i class="fas fa-key"></i>
+                                        </button>
+                                        
+                                        <!-- Delete Button -->
+                                        {% if username != current_user.username %}
+                                        <button @click="deleteUser = '{{ username }}'" 
+                                                class="cyber-btn-sm danger">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div x-show="deleteUser !== null" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div @click="deleteUser = null" class="fixed inset-0 bg-black/80"></div>
+            <div @click.away="deleteUser = null" 
+                 class="cyber-card max-w-md w-full relative z-10 animate-scale-in">
+                <div class="cyber-card-header bg-gradient-to-r from-red-600 to-red-800">
+                    <h3 class="text-lg font-semibold font-mono">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>CONFIRM DELETE
+                    </h3>
+                </div>
+                <div class="cyber-card-body">
+                    <p class="text-slate-300 mb-6">
+                        Are you sure you want to delete user <span class="text-red-400 font-mono" x-text="deleteUser"></span>?
+                    </p>
+                    <p class="text-sm text-slate-500 mb-6">
+                        <i class="fas fa-info-circle mr-1"></i>This action cannot be undone.
+                    </p>
+                    <div class="flex gap-3 justify-end">
+                        <button @click="deleteUser = null" class="cyber-btn secondary">
+                            <i class="fas fa-times mr-2"></i>CANCEL
+                        </button>
+                        <form :action="`{{ url_for('admin_users') }}`" method="POST" style="display: inline;">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="username" :value="deleteUser">
+                            <button type="submit" class="cyber-btn danger">
+                                <i class="fas fa-trash-alt mr-2"></i>DELETE USER
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div x-show="changePasswordUser !== null" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div @click="changePasswordUser = null; newPassword = ''" class="fixed inset-0 bg-black/80"></div>
+            <div @click.away="changePasswordUser = null" 
+                 class="cyber-card max-w-md w-full relative z-10 animate-scale-in">
+                <div class="cyber-card-header bg-gradient-to-r from-yellow-600 to-yellow-800">
+                    <h3 class="text-lg font-semibold font-mono">
+                        <i class="fas fa-key mr-2"></i>CHANGE PASSWORD
+                    </h3>
+                </div>
+                <div class="cyber-card-body">
+                    <form action="{{ url_for('admin_users') }}" method="POST" class="space-y-4">
+                        <input type="hidden" name="action" value="change_password">
+                        <input type="hidden" name="username" :value="changePasswordUser">
+                        
+                        <div class="mb-4">
+                            <p class="text-slate-300 mb-2">
+                                Change password for: <span class="text-cyan-400 font-mono" x-text="changePasswordUser"></span>
+                            </p>
+                        </div>
+                        
+                        <div class="cyber-input-group">
+                            <label class="cyber-label">
+                                <i class="fas fa-lock mr-2"></i>New Password
+                            </label>
+                            <input type="password" 
+                                   name="new_password" 
+                                   x-model="newPassword"
+                                   required 
+                                   minlength="4"
+                                   class="cyber-input" 
+                                   placeholder="Enter new password...">
+                            <p class="text-xs text-slate-500 mt-1">
+                                <i class="fas fa-info-circle mr-1"></i>Minimum 4 characters
+                            </p>
+                        </div>
+                        
+                        <div class="flex gap-3 justify-end pt-4">
+                            <button type="button" 
+                                    @click="changePasswordUser = null; newPassword = ''" 
+                                    class="cyber-btn secondary">
+                                <i class="fas fa-times mr-2"></i>CANCEL
+                            </button>
+                            <button type="submit" class="cyber-btn warning">
+                                <i class="fas fa-key mr-2"></i>CHANGE PASSWORD
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    [x-cloak] { display: none !important; }
+    
+    @keyframes scale-in {
+        0% {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+    
+    .animate-scale-in {
+        animation: scale-in 0.2s ease-out;
+    }
+    
+    .cyber-input-sm {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(100, 116, 139, 0.3);
+        border-radius: 6px;
+        color: white;
+        transition: all 0.3s ease;
+    }
+    
+    .cyber-input-sm:focus {
+        outline: none;
+        border-color: #06b6d4;
+        box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+    }
+</style>
+{% endblock %}

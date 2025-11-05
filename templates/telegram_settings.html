@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="{ testing: false, testResult: null }">
+    <!-- Header -->
+    <div class="mb-6">
+        <div class="mb-4">
+            <h2 class="text-2xl md:text-3xl font-bold text-white font-mono flex items-center flex-wrap">
+                <i class="fab fa-telegram text-blue-400 mr-3"></i>
+                <span class="text-blue-400">TELEGRAM</span> 
+                <span class="ml-2">NOTIFICATIONS</span>
+            </h2>
+            <p class="text-slate-400 text-sm mt-1">Configure Telegram bot for schedule notifications</p>
+        </div>
+    </div>
+
+    <!-- Settings Form -->
+    <div class="cyber-card max-w-3xl">
+        <div class="cyber-border"></div>
+        <div class="relative z-10 p-6">
+            <form method="POST" class="space-y-6">
+                <!-- Enable Notifications -->
+                <div class="flex items-center justify-between p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                    <div>
+                        <label class="text-lg font-medium text-white">Enable Notifications</label>
+                        <p class="text-sm text-slate-400 mt-1">Receive Telegram notifications for schedule events</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="enabled" class="sr-only peer" 
+                               {% if config.enabled %}checked{% endif %}>
+                        <div class="w-14 h-7 bg-gray-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-cyan-600"></div>
+                    </label>
+                </div>
+
+                <!-- Bot Token -->
+                <div class="cyber-input-group">
+                    <label class="cyber-label">
+                        <i class="fas fa-robot mr-2"></i>Bot Token
+                    </label>
+                    <input type="text" 
+                           name="bot_token" 
+                           value="{{ config.bot_token }}" 
+                           class="cyber-input font-mono"
+                           placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                           required>
+                    <p class="text-xs text-slate-500 mt-2">
+                        Get your bot token from <a href="https://t.me/BotFather" target="_blank" class="text-cyan-400 hover:underline">@BotFather</a> on Telegram
+                    </p>
+                </div>
+
+                <!-- Chat ID -->
+                <div class="cyber-input-group">
+                    <label class="cyber-label">
+                        <i class="fas fa-id-card mr-2"></i>Chat ID
+                    </label>
+                    <input type="text" 
+                           name="chat_id" 
+                           value="{{ config.chat_id }}" 
+                           class="cyber-input font-mono"
+                           placeholder="-1001234567890 or 123456789"
+                           required>
+                    <p class="text-xs text-slate-500 mt-2">
+                        Your personal chat ID or group chat ID. Get it from <a href="https://t.me/userinfobot" target="_blank" class="text-cyan-400 hover:underline">@userinfobot</a>
+                    </p>
+                </div>
+
+                <!-- Instructions -->
+                <div class="glass-panel p-4 rounded-lg border border-cyan-500/20">
+                    <h4 class="text-sm font-bold text-cyan-400 mb-3 font-mono uppercase tracking-wider flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>Setup Instructions
+                    </h4>
+                    <ol class="text-sm text-slate-300 space-y-2 list-decimal list-inside">
+                        <li>Open Telegram and search for <span class="font-mono text-cyan-400">@BotFather</span></li>
+                        <li>Send <span class="font-mono text-cyan-400">/newbot</span> to create a new bot</li>
+                        <li>Follow the instructions and copy the <strong>Bot Token</strong></li>
+                        <li>Search for <span class="font-mono text-cyan-400">@userinfobot</span> and send <span class="font-mono text-cyan-400">/start</span></li>
+                        <li>Copy your <strong>Chat ID</strong> (it will be a number)</li>
+                        <li>Start a conversation with your new bot (send <span class="font-mono text-cyan-400">/start</span>)</li>
+                        <li>Fill in the form above and click <strong>Save Settings</strong></li>
+                        <li>Click <strong>Test Connection</strong> to verify</li>
+                    </ol>
+                </div>
+
+                <!-- Notification Types -->
+                <div class="glass-panel p-4 rounded-lg border border-purple-500/20">
+                    <h4 class="text-sm font-bold text-purple-400 mb-3 font-mono uppercase tracking-wider flex items-center">
+                        <i class="fas fa-bell mr-2"></i>Notification Types
+                    </h4>
+                    <div class="space-y-2 text-sm text-slate-300">
+                        <div class="flex items-start">
+                            <i class="fas fa-check text-green-400 mr-3 mt-1"></i>
+                            <span><strong>Schedule Created:</strong> When a stream is successfully scheduled to YouTube</span>
+                        </div>
+                        <div class="flex items-start">
+                            <i class="fas fa-play text-blue-400 mr-3 mt-1"></i>
+                            <span><strong>Stream Starting:</strong> When a scheduled stream goes live</span>
+                        </div>
+                        <div class="flex items-start">
+                            <i class="fas fa-stop text-red-400 mr-3 mt-1"></i>
+                            <span><strong>Stream Ended:</strong> When a stream finishes</span>
+                        </div>
+                        <div class="flex items-start">
+                            <i class="fas fa-exclamation-triangle text-yellow-400 mr-3 mt-1"></i>
+                            <span><strong>Errors:</strong> When there's an error creating a schedule</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-cyan-500/20">
+                    <button type="submit" class="cyber-btn primary flex-1">
+                        <i class="fas fa-save mr-2"></i>Save Settings
+                    </button>
+                    <button type="button" 
+                            @click="testConnection()" 
+                            :disabled="testing"
+                            class="cyber-btn secondary flex-1">
+                        <i :class="testing ? 'fas fa-spinner fa-spin' : 'fas fa-vial'" class="mr-2"></i>
+                        <span x-text="testing ? 'Testing...' : 'Test Connection'"></span>
+                    </button>
+                </div>
+
+                <!-- Test Result -->
+                <div x-show="testResult" 
+                     x-transition
+                     :class="testResult?.success ? 'bg-green-500/10 border-green-500' : 'bg-red-500/10 border-red-500'"
+                     class="p-4 rounded-lg border">
+                    <div class="flex items-start">
+                        <i :class="testResult?.success ? 'fas fa-check-circle text-green-400' : 'fas fa-times-circle text-red-400'" class="mr-3 mt-1"></i>
+                        <div>
+                            <h5 :class="testResult?.success ? 'text-green-400' : 'text-red-400'" class="font-bold mb-1">
+                                <span x-text="testResult?.success ? 'Success!' : 'Failed'"></span>
+                            </h5>
+                            <p class="text-sm text-slate-300" x-text="testResult?.message"></p>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function testConnection() {
+    this.testing = true;
+    this.testResult = null;
+    
+    fetch('{{ url_for("telegram_test") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        this.testResult = data;
+        this.testing = false;
+    })
+    .catch(error => {
+        this.testResult = {
+            success: false,
+            message: 'Connection failed: ' + error.message
+        };
+        this.testing = false;
+    });
+}
+</script>
+{% endblock %}

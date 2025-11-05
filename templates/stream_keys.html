@@ -1,42 +1,100 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <h2>Stream Keys Management</h2>
-        </div>
-    </div>
+<!-- Cyber Header -->
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-white font-mono flex items-center">
+        <i class="fas fa-key text-cyan-400 mr-3"></i>
+        <span class="text-cyan-400">STREAM</span> KEYS MANAGEMENT
+    </h1>
+    <p class="text-slate-400 text-sm mt-1 font-mono">Manage your YouTube RTMP stream credentials</p>
 </div>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-key"></i> Fetch Stream Keys
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Fetch Stream Keys -->
+    <div>
+        <div class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-purple-600 to-purple-800">
+                <h5 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fas fa-sync mr-2"></i> FETCH STREAM KEYS
                 </h5>
             </div>
-            <div class="card-body">
+            <div class="cyber-card-body">
                 <form action="{{ url_for('fetch_stream_keys') }}" method="POST">
-                    <div class="mb-3">
-                        <label class="form-label">Select Channel Token</label>
+                    <div class="mb-4">
+                        <label class="cyber-label">
+                            <i class="fas fa-file-code mr-2"></i>Select Channel Token
+                        </label>
                         {% if tokens %}
-                        <select class="form-control" name="token_file" required>
+                        <select class="cyber-input" name="token_file" required>
                             {% for token in tokens %}
                             <option value="{{ token }}">{{ token }}</option>
                             {% endfor %}
                         </select>
                         {% else %}
-                        <div class="alert alert-warning">
-                            No tokens available. Please <a href="{{ url_for('tokens') }}">create a token</a> first.
+                        <div class="cyber-alert warning">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            No tokens available. Please <a href="{{ url_for('tokens') }}" class="text-cyan-400 underline hover:text-cyan-300">create a token</a> first.
                         </div>
                         {% endif %}
                     </div>
                     
                     {% if tokens %}
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-sync"></i> Fetch Stream Keys
+                    <button type="submit" class="cyber-btn primary w-full">
+                        <i class="fas fa-sync mr-2"></i> FETCH STREAM KEYS
+                    </button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Create New Stream Key -->
+    <div>
+        <div class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-green-600 to-green-800">
+                <h5 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fas fa-plus-circle mr-2"></i> CREATE NEW STREAM
+                </h5>
+            </div>
+            <div class="cyber-card-body">
+                <form action="{{ url_for('create_new_stream') }}" method="POST">
+                    <div class="mb-4">
+                        <label class="cyber-label">
+                            <i class="fas fa-heading mr-2"></i>Stream Title
+                        </label>
+                        <input type="text" name="stream_title" required 
+                               class="cyber-input" placeholder="Enter stream title...">
+                        <p class="text-xs text-slate-500 mt-1">
+                            <i class="fas fa-info-circle mr-1"></i>Custom title for the new stream key
+                        </p>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="cyber-label">
+                            <i class="fas fa-file-code mr-2"></i>Select Channel Token
+                        </label>
+                        {% if tokens %}
+                        <select class="cyber-input" name="token_file" required>
+                            <option value="">-- Select Token --</option>
+                            {% for token in tokens %}
+                            <option value="{{ token }}">{{ token }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="text-xs text-slate-500 mt-1">
+                            <i class="fas fa-info-circle mr-1"></i>Channel where stream will be created
+                        </p>
+                        {% else %}
+                        <div class="cyber-alert warning">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            No tokens available
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if tokens %}
+                    <button type="submit" class="cyber-btn success w-full">
+                        <i class="fas fa-plus-circle mr-2"></i> CREATE STREAM KEY
                     </button>
                     {% endif %}
                 </form>
@@ -44,54 +102,63 @@
         </div>
     </div>
 
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-info text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-list"></i> Available Stream Keys
+    <div>
+        <div class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-cyan-600 to-cyan-800">
+                <h5 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fas fa-database mr-2"></i> AVAILABLE STREAM KEYS
                 </h5>
             </div>
-            <div class="card-body">
-                <div class="d-flex justify-content-between mb-2">
-                    <div>
-                        <a href="{{ url_for('manage_streams') }}" class="btn btn-sm btn-outline-secondary">
-                            <i class="fas fa-cog"></i> Manage Stream Mappings
-                        </a>
-                    </div>
+            <div class="cyber-card-body">
+                <div class="mb-4">
+                    <a href="{{ url_for('manage_streams') }}" class="cyber-btn success">
+                        <i class="fas fa-cog mr-2"></i> MANAGE STREAM MAPPINGS
+                    </a>
                 </div>
 
                 {% if stream_mapping %}
                     {% for token, streams in stream_mapping.items() %}
-                    <div class="mb-3">
-                        <h6>Token: <code>{{ token }}</code></h6>
+                    <div class="mb-6 cyber-panel">
+                        <h6 class="text-sm font-mono font-semibold text-cyan-400 mb-3 flex items-center">
+                            <i class="fas fa-file-code mr-2"></i>TOKEN: 
+                            <code class="bg-slate-800/50 px-3 py-1 rounded ml-2 text-xs text-green-400 border border-slate-700">{{ token }}</code>
+                        </h6>
                         {% if streams %}
-                        <div class="table-responsive">
-                            <table class="table table-sm table-striped">
+                        <div class="overflow-x-auto cyber-table-container">
+                            <table class="cyber-table">
                                 <thead>
                                     <tr>
-                                        <th>Stream Title</th>
-                                        <th>Stream ID</th>
-                                        <th>CDN/Type</th>
+                                        <th><i class="fas fa-video mr-2"></i>STREAM TITLE</th>
+                                        <th><i class="fas fa-key mr-2"></i>STREAM KEY</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for stream_id, meta in streams.items() %}
                                     <tr>
-                                        <td>{{ meta['title'] if meta and 'title' in meta else stream_id }}</td>
-                                        <td><code>{{ stream_id }}</code></td>
-                                        <td>{{ meta['cdn'].get('ingestionType', '') if meta and 'cdn' in meta else '' }}</td>
+                                        <td class="font-medium text-white">{{ meta['title'] if meta and 'title' in meta else stream_id }}</td>
+                                        <td>
+                                            {% if meta and 'cdn' in meta and 'ingestionInfo' in meta['cdn'] and 'streamName' in meta['cdn']['ingestionInfo'] %}
+                                            <code class="cyber-code success">{{ meta['cdn']['ingestionInfo']['streamName'] }}</code>
+                                            {% else %}
+                                            <span class="text-slate-500 text-xs italic">Not available</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
                             </table>
                         </div>
                         {% else %}
-                        <div class="alert alert-light">No streams found for this token.</div>
+                        <div class="cyber-alert info">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            No streams found for this token.
+                        </div>
                         {% endif %}
                     </div>
                     {% endfor %}
                 {% else %}
-                <div class="alert alert-info">
+                <div class="cyber-alert info">
+                    <i class="fas fa-info-circle mr-2"></i>
                     No stream keys available. Use the form on the left to fetch stream keys from your YouTube channel.
                 </div>
                 {% endif %}

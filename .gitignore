@@ -1,0 +1,125 @@
+# ===== Python =====
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# ===== Logs =====
+*.log
+ffmpeg_logs/
+*.log.*
+
+# ===== IDE / Editors =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# ===== OS Files =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Credentials & Sensitive Files (CRITICAL!) =====
+# Google API credentials
+# client_secret.json - ALLOWED for easier setup
+license_credentials.json
+*.json.bak
+
+# OAuth tokens
+tokens/
+token.json
+*.token
+.gdrive_auth_state.json
+
+# License system files (contains customer data)
+license_cache.json
+license_config.json
+lisensi.json
+
+# User authentication data
+users.json
+
+# Telegram configuration (contains bot token)
+telegram_config.json
+
+# ===== Application Configuration & Runtime Data =====
+# Live stream configuration (may contain keys)
+live_streams.json
+stream_mapping.json
+stream_timers.json
+
+# Scheduler data
+schedule_config.json
+scheduler_status.json
+
+# Database files (user-generated content)
+video_database.json
+thumbnail_database.json
+
+# ===== Media & Content =====
+# User uploaded files
+videos/
+thumbnails/
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.flv
+*.wmv
+*.webm
+
+# ===== Excel Data Files =====
+# Contains stream keys and sensitive data
+data.xlsx
+live_stream_data.xlsx
+live_stream_data_updated.xlsx
+*.xlsx
+!*_template.xlsx
+!*_example.xlsx
+
+# ===== Build & Dependencies =====
+# Node modules
+node_modules/
+package-lock.json
+
+# Python dependencies
+*.egg-info/
+dist/
+build/
+
+# ===== Backup & Temporary Files =====
+backup/
+*.bak
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+
+# ===== Process Management =====
+.pm2/
+*.pid
+
+# ===== Test & Development =====
+test_*.py
+*_test.py
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== Tailwind (Windows executable) =====
+tailwindcss.exe

@@ -1,0 +1,243 @@
+/* Cyber Hacker Theme - Terminal Aesthetic */
+
+:root {
+    /* Primary Backgrounds */
+    --dark-bg: #0a0e27;
+    --dark-surface: #0f1729;
+    --dark-card: #0f1729;
+    --dark-border: #1e293b;
+    
+    /* Neon Accent Colors */
+    --accent-cyan: #00d9ff;
+    --accent-green: #00ff41;
+    --accent-purple: #a855f7;
+    --accent-magenta: #f81ce5;
+    --accent-red: #ff0055;
+    --accent-blue: #00d9ff;
+    --accent-yellow: #ffd900;
+    
+    /* Semantic Colors */
+    --color-success: #00ff41;
+    --color-warning: #ffd900;
+    --color-danger: #ff0055;
+    --color-info: #00d9ff;
+    
+    /* Text Colors */
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+}
+
+/* Custom Cyber Scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--dark-bg);
+    border-left: 1px solid rgba(0, 217, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #00d9ff, #a855f7);
+    border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #00ffff, #c084fc);
+    box-shadow: 0 0 15px rgba(0, 217, 255, 0.8);
+}
+
+/* Card hover effects */
+.dark-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+/* Gradient backgrounds */
+.gradient-blue {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.gradient-cyan {
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+.gradient-green {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.gradient-red {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.gradient-yellow {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+/* Data card styles */
+.data-card {
+    background: var(--dark-card);
+    border: 1px solid var(--dark-border);
+    border-radius: 0.75rem;
+    transition: all 0.3s ease;
+}
+
+.data-card:hover {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--accent-blue);
+}
+
+/* Status indicators */
+.status-active {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #10b981;
+}
+
+.status-inactive {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.status-pending {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+}
+
+/* Button glow effects */
+.btn-glow-blue {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+.btn-glow-green {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.btn-glow-red {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+/* Table styles */
+.dark-table {
+    background: var(--dark-card);
+}
+
+.dark-table thead {
+    background: rgba(51, 65, 85, 0.5);
+}
+
+.dark-table tbody tr:hover {
+    background: rgba(71, 85, 105, 0.3);
+}
+
+/* Modal backdrop */
+.modal-backdrop-dark {
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(4px);
+}
+
+/* Input focus styles */
+.input-dark:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Badge styles */
+.badge-dark {
+    background: rgba(71, 85, 105, 0.5);
+    color: #cbd5e1;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Loading animation */
+@keyframes pulse-slow {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: .5;
+    }
+}
+
+.animate-pulse-slow {
+    animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Stat card with icon */
+.stat-card-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem;
+    font-size: 1.5rem;
+}
+
+/* Activity log dark theme styles */
+.activity-item {
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid var(--dark-border);
+    transition: all 0.3s ease;
+}
+
+.activity-item:hover {
+    background: rgba(51, 65, 85, 0.3);
+    transform: translateX(4px);
+}
+
+/* Activity type specific colors */
+.activity-live {
+    border-left-color: var(--accent-red) !important;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.activity-completed {
+    border-left-color: var(--accent-green) !important;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.activity-scheduled {
+    border-left-color: var(--accent-blue) !important;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* --- Global Overrides for Light Tailwind Utilities to Dark Theme --- */
+/* Background overrides */
+.bg-white { background-color: var(--dark-card) !important; }
+.bg-gray-50, .bg-slate-50 { background-color: var(--dark-surface) !important; }
+.bg-gray-100, .bg-slate-100 { background-color: var(--dark-surface) !important; }
+.bg-gray-200, .bg-slate-200 { background-color: var(--dark-surface) !important; }
+
+/* Text color overrides */
+.text-black { color: #e5e7eb !important; }
+.text-gray-700, .text-slate-700 { color: #cbd5e1 !important; }
+.text-gray-800, .text-slate-800 { color: #e5e7eb !important; }
+.text-gray-900, .text-slate-900 { color: #ffffff !important; }
+
+/* Border overrides */
+.border-gray-200, .border-slate-200 { border-color: var(--dark-border) !important; }
+.border-gray-300, .border-slate-300 { border-color: var(--dark-border) !important; }
+
+/* State background tweaks */
+.bg-red-50 { background-color: rgba(239, 68, 68, 0.08) !important; }
+.bg-green-50 { background-color: rgba(16, 185, 129, 0.08) !important; }
+.bg-blue-50 { background-color: rgba(59, 130, 246, 0.08) !important; }
+.bg-yellow-50 { background-color: rgba(245, 158, 11, 0.08) !important; }
+
+/* Inputs dark styling helpers */
+.input-dark { background-color: var(--dark-card) !important; color: #e5e7eb !important; border-color: var(--dark-border) !important; }
+.input-dark::placeholder { color: #94a3b8 !important; }
+.input-dark:focus { border-color: var(--accent-blue) !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12) !important; }

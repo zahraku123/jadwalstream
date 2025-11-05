@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Authorization Token{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+        <div class="bg-blue-600 text-white px-6 py-4">
+            <h4 class="text-xl font-bold flex items-center">
+                <i class="fas fa-lock mr-2"></i> Google Authorization
+            </h4>
+        </div>
+        <div class="p-6" x-data="tokenAuth()">
+            <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
+                <h5 class="font-semibold text-blue-800 dark:text-blue-200 mb-3 flex items-center">
+                    <i class="fas fa-clipboard-list mr-2"></i> Langkah-langkah:
+                </h5>
+                <ol class="list-decimal list-inside space-y-2 text-blue-700 dark:text-blue-300">
+                    <li>Klik tombol di bawah untuk membuka URL Google OAuth</li>
+                    <li>Login dengan akun Google Anda</li>
+                    <li>Izinkan akses ke YouTube</li>
+                    <li>Copy <strong>kode authorization</strong> yang muncul</li>
+                    <li>Paste kode tersebut di form di bawah</li>
+                </ol>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">URL Authorization:</label>
+                <div class="flex gap-2">
+                    <input type="text" class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 dark:text-gray-100" id="authUrl" value="{{ auth_url }}" readonly>
+                    <button @click="copyUrl()" class="px-4 py-2 rounded-lg font-medium transition duration-200 flex items-center"
+                            :class="copied ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'">
+                        <i :class="copied ? 'fas fa-check' : 'fas fa-clipboard'" class="mr-2"></i>
+                        <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                    </button>
+                    <a href="{{ auth_url }}" target="_blank" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition duration-200 flex items-center">
+                        <i class="fas fa-external-link-alt mr-2"></i> Buka URL
+                    </a>
+                </div>
+                <small class="text-sm text-gray-500 dark:text-gray-400 mt-1 block">Buka URL ini di browser Anda (tab baru akan terbuka)</small>
+            </div>
+
+            <hr class="border-gray-300 dark:border-gray-600 my-6">
+
+            <form method="POST" action="{{ url_for('complete_token') }}">
+                <input type="hidden" name="token_name" value="{{ token_name }}">
+                
+                <div class="mb-6">
+                    <label for="auth_code" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Kode Authorization:</label>
+                    <textarea class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" id="auth_code" name="auth_code" rows="3" 
+                              placeholder="Paste kode authorization dari Google di sini..." required></textarea>
+                    <small class="text-sm text-gray-500 dark:text-gray-400 mt-1 block">Paste kode yang Anda dapatkan setelah authorize di Google</small>
+                </div>
+
+                <div class="flex justify-between">
+                    <a href="{{ url_for('tokens') }}" class="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-200 flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i> Batal
+                    </a>
+                    <button type="submit" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition duration-200 flex items-center">
+                        <i class="fas fa-check-circle mr-2"></i> Buat Token
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function tokenAuth() {
+    return {
+        copied: false,
+        
+        async copyUrl() {
+            const urlInput = document.getElementById('authUrl');
+            try {
+                await navigator.clipboard.writeText(urlInput.value);
+                this.copied = true;
+                setTimeout(() => {
+                    this.copied = false;
+                }, 2000);
+            } catch (err) {
+                // Fallback for older browsers
+                urlInput.select();
+                document.execCommand('copy');
+                this.copied = true;
+                setTimeout(() => {
+                    this.copied = false;
+                }, 2000);
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

@@ -2,17 +2,19 @@ import os
 import pandas as pd
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import time
 import logging
 import json
+import telegram_notifier
 
 # ================= CONFIG =================
 EXCEL_FILE = 'live_stream_data.xlsx'
 DEFAULT_TIMEZONE = 'Asia/Jakarta'
 DRY_RUN = False
 STREAM_MAPPING_FILE = 'stream_mapping.json'
+TOKENS_FOLDER = 'tokens'  # Folder for token files
 
 def load_stream_mapping(token_file):
     try:
@@ -35,7 +37,9 @@ def load_stream_mapping(token_file):
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_youtube_service(token_file):
-    creds = Credentials.from_authorized_user_file(token_file, ['https://www.googleapis.com/auth/youtube'])
+    # Construct full path to token file in tokens folder
+    token_path = os.path.join(TOKENS_FOLDER, token_file)
+    creds = Credentials.from_authorized_user_file(token_path, ['https://www.googleapis.com/auth/youtube'])
     youtube = build('youtube', 'v3', credentials=creds)
     logging.info(f"✅ Authenticated with token: {token_file}")
     return youtube
@@ -188,8 +192,13 @@ def main():
             made_for_kids = bool(row.get('madeForKids', False))
             token_file = str(row['tokenFile'])
             use_existing_stream = bool(row.get('useExistingStream', False))
-            streamNameExisting = str(row.get('streamNameExisting', '')).strip()
-            thumbnail_path = str(row.get('thumbnailFile', '')).strip()
+            
+            # Handle NaN values properly
+            streamNameExisting = row.get('streamNameExisting', '')
+            streamNameExisting = '' if pd.isna(streamNameExisting) else str(streamNameExisting).strip()
+            
+            thumbnail_path = row.get('thumbnailFile', '')
+            thumbnail_path = '' if pd.isna(thumbnail_path) else str(thumbnail_path).strip()
 
             youtube = get_youtube_service(token_file)
 
@@ -200,22 +209,58 @@ def main():
                     use_existing_stream, streamNameExisting, token_file
                 )
 
-                # Upload thumbnail
-                if thumbnail_path and os.path.exists(thumbnail_path):
-                    try:
-                        youtube.thumbnails().set(
-                            videoId=broadcast_id,
-                            media_body=thumbnail_path
-                        ).execute()
-                        logging.info(f"✅ Thumbnail uploaded: {thumbnail_path}")
-                    except Exception as e:
-                        logging.error(f"Failed to upload thumbnail for {title}: {e}")
+                # Upload thumbnail with path normalization
+                if thumbnail_path:
+                    # Normalize path: ensure 'thumbnails/' prefix
+                    if not thumbnail_path.startswith('thumbnails/'):
+                        thumbnail_path = f'thumbnails/{thumbnail_path}'
+                    thumbnail_path = thumbnail_path.lstrip('/')
+                    
+                    logging.info(f"Checking thumbnail path: {thumbnail_path}")
+                    if os.path.exists(thumbnail_path):
+                        try:
+                            youtube.thumbnails().set(
+                                videoId=broadcast_id,
+                                media_body=thumbnail_path
+                            ).execute()
+                            logging.info(f"✅ Thumbnail uploaded: {thumbnail_path}")
+                        except Exception as e:
+                            logging.error(f"Failed to upload thumbnail for {title}: {e}")
+                    else:
+                        logging.warning(f"⚠️ Thumbnail file not found: {thumbnail_path}")
 
                 # Update Excel
                 df.at[idx, 'success'] = True
                 df.at[idx, 'streamId'] = str(stream_id)
-                df.at[idx, 'broadcastLink'] = f"https://studio.youtube.com/video/{broadcast_id}/livestreaming"
+                broadcast_link = f"https://studio.youtube.com/video/{broadcast_id}/livestreaming"
+                df.at[idx, 'broadcastLink'] = broadcast_link
                 logging.info("Broadcast link saved to Excel bro")
+                
+                # Send Telegram notification
+                try:
+                    display_time = scheduled_start_time if isinstance(scheduled_start_time, str) else str(scheduled_start_time)
+                    logging.info(f"[TELEGRAM] Sending notification for: {title}")
+                    telegram_notifier.notify_schedule_created(title, display_time, broadcast_link)
+                    logging.info(f"[TELEGRAM] Notification sent successfully")
+                except Exception as e:
+                    logging.error(f"[TELEGRAM] Failed to send notification: {e}", exc_info=True)
+
+                # Handle repeat_daily logic
+                repeat_daily = bool(row.get('repeat_daily', False))
+                if repeat_daily:
+                    # ✅ REPEAT DAILY: Increment +1 day and reset success
+                    try:
+                        current_local_time = pd.to_datetime(df.at[idx, 'scheduledStartTime'])
+                        new_local_time = current_local_time + pd.Timedelta(days=1)
+                        df.at[idx, 'scheduledStartTime'] = new_local_time.strftime('%Y-%m-%dT%H:%M')
+                        df.at[idx, 'success'] = False  # Reset for tomorrow
+                        logging.info(f"✅ [REPEAT DAILY] Rescheduled: {current_local_time} -> {new_local_time}")
+                    except Exception as e:
+                        logging.error(f"Failed to increment scheduledStartTime for '{title}': {e}")
+                else:
+                    # ❌ ONE-TIME: Keep success=True (completed)
+                    logging.info(f"❌ [ONE-TIME] Schedule '{title}' completed, not rescheduled")
+                
                 time.sleep(2)
             else:
                 df.at[idx, 'success'] = False
