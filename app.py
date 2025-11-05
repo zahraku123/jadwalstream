@@ -487,18 +487,9 @@ def stop_ffmpeg_stream(stream_id):
             except Exception as excel_err:
                 logging.error(f"❌ Error updating Excel file: {excel_err}")
 
-            # Buat jadwal baru HANYA jika repeat_daily = True
-            if stream.get('repeat_daily', False):
-                new_stream = stream.copy()
-                new_stream['id'] = str(uuid.uuid4())
-                new_stream['status'] = 'scheduled'
-                current_start = datetime.strptime(stream['start_date'], '%Y-%m-%dT%H:%M')
-                next_day = current_start + timedelta(days=1)
-                new_stream['start_date'] = next_day.strftime('%Y-%m-%dT%H:%M')
-                streams.append(new_stream)
-                print(f"[REPEAT_DAILY] Jadwal baru dibuat untuk stream {stream['title']} pada {new_stream['start_date']}")
-            else:
-                print(f"[NO REPEAT] Stream {stream['title']} tidak dijadwalkan ulang (repeat_daily=False)")
+            # NOTE: Jadwal baru untuk repeat_daily sudah dibuat di check_scheduled_streams() saat stream dimulai
+            # Tidak perlu buat lagi di sini untuk menghindari duplikasi
+            print(f"[STREAM_ENDED] Stream '{stream['title']}' berakhir. Jadwal berikutnya (jika repeat_daily=True) sudah dibuat saat stream dimulai.")
             
             # Send Telegram notification for stream stop
             try:
