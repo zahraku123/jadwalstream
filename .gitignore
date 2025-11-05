@@ -1,133 +1,81 @@
-# ===== Python =====
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.pyc
-*.pyo
-*.pyd
-
-# Virtual environments
-venv/
+.Python
 env/
+venv/
 ENV/
-.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# ===== Logs =====
-*.log
-ffmpeg_logs/
-*.log.*
+# Virtual Environment
+venv/
+ENV/
 
-# ===== IDE / Editors =====
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.project
-.pydevproject
 
-# ===== OS Files =====
+# OS
 .DS_Store
 Thumbs.db
-desktop.ini
+*.log
 
-# ===== Credentials & Sensitive Files (CRITICAL!) =====
-# Google API credentials
-# client_secret.json - ALLOWED for easier setup
-*.json.bak
-
-# OAuth tokens
-tokens/
-token.json
-*.token
-.gdrive_auth_state.json
-
-# License system files (contains customer data)
-license_cache.json
-license_config.json
-
-# User authentication data
-users.json
-
-# Telegram configuration (contains bot token)
-telegram_config.json
-
-# ===== Application Configuration & Runtime Data =====
-# Live stream configuration (may contain keys)
-live_streams.json
-stream_mapping.json
-stream_timers.json
-
-# Scheduler data
-schedule_config.json
-scheduler_status.json
-
-# Database files (user-generated content)
-video_database.json
-thumbnail_database.json
-
-# ===== Media & Content =====
-# User uploaded files
-videos/
-thumbnails/
-*.mp4
-*.avi
-*.mkv
-*.mov
-*.flv
-*.wmv
-*.webm
-
-# ===== Excel Data Files =====
-# Contains stream keys and sensitive data
+# Data files (user-generated)
 data.xlsx
 live_stream_data.xlsx
 live_stream_data_updated.xlsx
-*.xlsx
-!*_template.xlsx
-!*_example.xlsx
+scheduler_status.json
+license_cache.json
+stream_timers.json
+thumbnail_database.json
+video_database.json
+live_streams.json
 
-# ===== Build & Dependencies =====
+# User generated content
+videos/
+thumbnails/
+tokens/
+ffmpeg_logs/
+backup/
+
+# Credentials
+client_secret.json
+
+# Config files (will use .example instead)
+telegram_config.json
+schedule_config.json
+stream_mapping.json
+
+# Documentation (except README.md)
+*.md
+!README.md
+
+# License admin files - JANGAN DI-UPLOAD!
+apps_script/
+license_generator.py
+
 # Node modules
 node_modules/
+package-lock.json
 
-# Python dependencies
-*.egg-info/
-dist/
-build/
-.eggs/
-
-# ===== Backup & Temporary Files =====
-backup/
-*.bak
-*.tmp
-*.temp
-*~
-*.swp
-*.swo
-*.old
-
-# Bash scripts (keep examples)
-backup_and_upload.sh
-
-# ===== Process Management =====
-.pm2/
-*.pid
-*.sock
-
-# ===== Test & Development =====
-test_*.py
-*_test.py
-.pytest_cache/
-.coverage
-htmlcov/
-
-# ===== Tailwind & Static Build =====
-tailwindcss.exe
-static/css/output.css
-
-# ===== Apps Script (optional deployment files) =====
-apps_script/.clasp.json
-apps_script/appsscript.json
+# Windows installer
+install.bat

@@ -95,22 +95,54 @@ check_ffmpeg() {
 install_python_deps() {
     print_info "Installing Python dependencies..."
     
-    # Check if pip is available
-    if ! command -v pip3 &> /dev/null; then
+    # Check if pip is available for current python3
+    if python3 -m pip --version &> /dev/null; then
+        print_info "pip already installed"
+    elif command -v pip3 &> /dev/null; then
+        print_info "pip3 command found"
+    else
         print_info "Installing pip..."
-        python3 -m ensurepip --default-pip
+        if python3 -m ensurepip --default-pip 2>/dev/null; then
+            print_info "pip installed via ensurepip"
+        else
+            print_error "Failed to install pip. Please install python3-pip manually:"
+            print_error "  Ubuntu/Debian: sudo apt install python3-pip"
+            print_error "  macOS: brew install python3"
+            exit 1
+        fi
     fi
     
-    # Upgrade pip
-    python3 -m pip install --upgrade pip
-    
-    # Install requirements
-    if [ -f "requirements.txt" ]; then
-        python3 -m pip install -r requirements.txt
-        print_info "Python dependencies installed successfully"
-    else
+    # Check if requirements.txt exists
+    if [ ! -f "requirements.txt" ]; then
         print_error "requirements.txt not found!"
         exit 1
+    fi
+    
+    # Try to install packages, handling PEP 668 externally-managed-environment
+    print_info "Installing Python packages..."
+    
+    # Try normal installation first
+    if python3 -m pip install -r requirements.txt --quiet 2>/dev/null; then
+        print_info "Python dependencies installed successfully"
+    elif pip3 install -r requirements.txt --quiet 2>/dev/null; then
+        print_info "Python dependencies installed successfully"
+    else
+        # Check if it's an externally-managed-environment error
+        print_warning "Standard pip install failed (likely PEP 668 protection)"
+        print_info "Using --break-system-packages flag..."
+        
+        if python3 -m pip install -r requirements.txt --break-system-packages; then
+            print_info "Python dependencies installed successfully with --break-system-packages"
+        elif pip3 install -r requirements.txt --break-system-packages; then
+            print_info "Python dependencies installed successfully with --break-system-packages"
+        else
+            print_error "Failed to install dependencies!"
+            print_info "Alternative: Create a virtual environment:"
+            print_info "  python3 -m venv venv"
+            print_info "  source venv/bin/activate"
+            print_info "  pip install -r requirements.txt"
+            exit 1
+        fi
     fi
 }
 

@@ -1,0 +1,12 @@
+{
+    "admin": {
+        "username": "admin",
+        "password_hash": "scrypt:32768:8:1$BBTu6h4kRSLPuzRy$f97956f5fe923e201744c6c1672bfebd668cf38ecc41cf64b852bdd7623d5fb684e55571a38bdb82247ebcd6fd046cf5b6d4f4c91bcb7c8702777feb3dc7fbbc",
+        "role": "admin"
+    },
+    "demo": {
+        "username": "demo",
+        "password_hash": "scrypt:32768:8:1$sD6HD3aCHNWfm8Cr$35f3ea86ad534abdfa6d323e5986639e0c08bef70da0c453fa0359ec02536c0b8afb4fb6a3d9bd1cd72b85a9251cda5a899e3a6a52dd1b65e96ed6095ee7eef7",
+        "role": "demo"
+    }
+}
