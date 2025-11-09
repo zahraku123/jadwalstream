@@ -546,17 +546,19 @@ def check_scheduled_streams():
                         new_stream['duration'] = stream['duration']
                     
                     # Check if a similar stream already exists to prevent duplicates
+                    # Check ALL streams with same video_file and start_date regardless of status
                     duplicate_exists = False
                     for existing_stream in streams:
                         if (existing_stream['video_file'] == new_stream['video_file'] and
-                            existing_stream['start_date'] == new_stream['start_date'] and
-                            existing_stream['status'] == 'scheduled'):
+                            existing_stream['start_date'] == new_stream['start_date']):
                             duplicate_exists = True
+                            print(f"[SCHEDULER] Duplicate detected: Stream for {new_stream['start_date']} already exists (ID: {existing_stream['id'][:8]}..., Status: {existing_stream['status']})")
                             break
                     
                     if not duplicate_exists:
                         streams.append(new_stream)
                         modified = True
+                        print(f"[SCHEDULER] Created next schedule for {new_stream['title']} on {new_stream['start_date']}")
     
     # Only save if changes were made
     if modified:
