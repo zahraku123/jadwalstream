@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+
+{% block title %}Video Looping - YouTube Scheduler{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-white mb-2">
+            <i class="fas fa-repeat text-pink-400 mr-2"></i>
+            Video Looping
+        </h1>
+        <p class="text-slate-400">Loop videos to create longer content for streaming</p>
+        <div class="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div class="flex items-start">
+                <i class="fas fa-info-circle text-blue-400 mt-0.5 mr-2"></i>
+                <div class="text-sm text-blue-300">
+                    <strong>Background Processing:</strong> Video looping runs on the server. You can close this tab and come back later - the process will continue in the background!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Source Videos -->
+    <div class="glass-panel rounded-xl p-6 border border-pink-500/20 mb-6">
+        <h2 class="text-xl font-semibold text-white mb-4">
+            <i class="fas fa-video mr-2 text-cyan-400"></i>
+            Source Videos
+        </h2>
+
+        <form method="POST" action="{{ url_for('start_video_looping') }}" id="loopingForm">
+            <div class="mb-4">
+                <label for="loop_duration" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-clock mr-2 text-yellow-400"></i>
+                    Loop Duration (minutes)
+                </label>
+                <input type="number" 
+                       name="loop_duration" 
+                       id="loop_duration" 
+                       min="1" 
+                       value="60" 
+                       required
+                       class="w-full max-w-xs px-4 py-2 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-pink-500 focus:border-transparent">
+                <p class="mt-1 text-sm text-slate-400">Video will loop for this duration</p>
+            </div>
+
+            {% if videos %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                {% for video in videos %}
+                <div class="glass-panel rounded-lg p-4 border border-dark-border hover:border-pink-500/50 transition-all">
+                    <div class="flex items-start space-x-3">
+                        <input type="checkbox" 
+                               name="video_ids[]" 
+                               value="{{ video.id }}" 
+                               id="video_{{ video.id }}"
+                               class="mt-1 h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-600 rounded bg-dark-card">
+                        <label for="video_{{ video.id }}" class="flex-1 cursor-pointer">
+                            <div class="flex items-center mb-2">
+                                <i class="fas fa-film text-cyan-400 mr-2"></i>
+                                <h3 class="font-medium text-slate-200 line-clamp-2">{{ video.title }}</h3>
+                            </div>
+                            <p class="text-xs text-slate-400">
+                                <i class="fas fa-file mr-1"></i>
+                                {{ video.filename }}
+                            </p>
+                            <p class="text-xs text-slate-500 mt-1">
+                                Added: {{ video.date_added }}
+                            </p>
+                        </label>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="flex items-center justify-between">
+                <button type="button" onclick="toggleSelectAll()" class="text-sm text-pink-400 hover:text-pink-300">
+                    <i class="fas fa-check-double mr-1"></i>
+                    Select All / Deselect All
+                </button>
+                
+                <button type="submit" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 transition-all">
+                    <i class="fas fa-play mr-2"></i>
+                    Start Looping
+                </button>
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-inbox text-slate-600 text-5xl mb-3"></i>
+                <p class="text-slate-400">No videos available. Upload videos first in Video Gallery.</p>
+                <a href="{{ url_for('video_gallery') }}" class="inline-flex items-center mt-4 text-cyan-400 hover:text-cyan-300">
+                    <i class="fas fa-arrow-right mr-2"></i>
+                    Go to Video Gallery
+                </a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Looped Videos Gallery -->
+    <div class="glass-panel rounded-xl p-6 border border-green-500/20" x-data="loopedGallery()">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold text-white">
+                <i class="fas fa-photo-film mr-2 text-green-400"></i>
+                Looped Videos Gallery
+            </h2>
+            <div class="flex items-center space-x-3">
+                <button @click="toggleSelectAllLooped()" class="text-sm text-green-400 hover:text-green-300">
+                    <i class="fas fa-check-double mr-1"></i>
+                    <span x-text="allSelected ? 'Deselect All' : 'Select All'"></span>
+                </button>
+                <button onclick="refreshStatus()" class="text-sm text-green-400 hover:text-green-300">
+                    <i class="fas fa-sync-alt mr-1"></i>
+                    Refresh
+                </button>
+                <button @click="deleteSelectedLooped()" 
+                        x-show="selectedCount > 0"
+                        class="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all">
+                    <i class="fas fa-trash mr-2"></i>
+                    Delete Selected (<span x-text="selectedCount"></span>)
+                </button>
+            </div>
+        </div>
+
+        <div id="loopedVideosContainer">
+            {% if looped_videos %}
+            <!-- Processing Status (if any) -->
+            {% set processing = looped_videos | selectattr('status', 'equalto', 'processing') | list %}
+            {% if processing %}
+            <div class="mb-6 space-y-2">
+                <h3 class="text-sm font-medium text-yellow-400 mb-3">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>
+                    Processing ({{ processing|length }})
+                </h3>
+                {% for looped in processing %}
+                <div class="glass-panel rounded-lg p-3 border border-yellow-500/30">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-1">
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                    <i class="fas fa-spinner fa-spin mr-1"></i>
+                                    Processing {{ looped.progress }}%
+                                </span>
+                                <span class="ml-2 text-sm font-medium text-slate-200">{{ looped.original_title }}</span>
+                            </div>
+                            <div class="text-xs text-slate-400">
+                                <i class="fas fa-clock mr-1"></i>
+                                Target: {{ looped.loop_duration_minutes }} minutes
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <!-- Completed Videos Gallery -->
+            {% set completed = looped_videos | selectattr('status', 'equalto', 'completed') | list %}
+            {% if completed %}
+            <div class="mb-4">
+                <h3 class="text-sm font-medium text-green-400 mb-3">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    Completed Videos ({{ completed|length }})
+                </h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for looped in completed %}
+                <div class="glass-panel rounded-lg border border-dark-border hover:border-green-500/50 transition-all group" data-video-id="{{ looped.id }}">
+                    <div class="p-0">
+                        <!-- Checkbox Overlay -->
+                        <div class="relative">
+                            <div class="absolute top-2 left-2 z-10">
+                                <input type="checkbox" 
+                                       class="looped-checkbox h-5 w-5 text-green-600 focus:ring-green-500 border-gray-600 rounded bg-dark-card cursor-pointer"
+                                       value="{{ looped.id }}"
+                                       @change="updateSelection()">
+                            </div>
+                            
+                            <!-- Status Badge -->
+                            <div class="absolute top-2 right-2 z-10">
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30 backdrop-blur-sm">
+                                    <i class="fas fa-check-circle mr-1"></i>
+                                    Ready
+                                </span>
+                            </div>
+                            
+                            <!-- Video Preview -->
+                            <video width="100%" controls preload="metadata" class="w-full aspect-video bg-slate-900 rounded-t-lg">
+                                <source src="{{ url_for('serve_looped_video', filename=looped.output_filename) }}">
+                                Your browser does not support the video tag.
+                            </video>
+                        </div>
+                        
+                        <!-- Video Info -->
+                        <div class="p-4 space-y-3">
+                            <h5 class="text-base font-semibold text-white truncate" title="{{ looped.original_title }}">
+                                {{ looped.original_title }}
+                            </h5>
+                            
+                            <div class="space-y-1 text-xs text-slate-400">
+                                <div class="flex items-center">
+                                    <i class="fas fa-clock mr-2 text-green-400"></i>
+                                    <span>Duration: {{ looped.loop_duration_minutes }} minutes</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <i class="fas fa-calendar mr-2 text-cyan-400"></i>
+                                    <span>Created: {{ looped.created_at }}</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <i class="fas fa-file mr-2 text-purple-400"></i>
+                                    <code class="text-xs bg-dark-card px-2 py-0.5 rounded">{{ looped.output_filename }}</code>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="border-t border-slate-700 p-3">
+                            <button onclick="deleteLoopedVideo('{{ looped.id }}')" 
+                                    class="w-full inline-flex items-center justify-center px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-all">
+                                <i class="fas fa-trash mr-2"></i>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <!-- Failed Videos (if any) -->
+            {% set failed = looped_videos | selectattr('status', 'equalto', 'failed') | list %}
+            {% if failed %}
+            <div class="mt-6 space-y-2">
+                <h3 class="text-sm font-medium text-red-400 mb-3">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    Failed ({{ failed|length }})
+                </h3>
+                {% for looped in failed %}
+                <div class="glass-panel rounded-lg p-3 border border-red-500/30">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-1">
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+                                    <i class="fas fa-times-circle mr-1"></i>
+                                    Failed
+                                </span>
+                                <span class="ml-2 text-sm font-medium text-slate-200">{{ looped.original_title }}</span>
+                            </div>
+                            <div class="text-xs text-red-400">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>
+                                {{ looped.error[:150] if looped.get('error') else 'Unknown error' }}
+                            </div>
+                        </div>
+                        <button onclick="deleteLoopedVideo('{{ looped.id }}')" class="ml-4 text-red-400 hover:text-red-300">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-photo-film text-slate-600 text-6xl mb-4"></i>
+                <p class="text-slate-400 text-lg mb-2">No looped videos yet</p>
+                <p class="text-slate-500 text-sm">Start looping videos above to see them here.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+// Alpine.js component for looped videos gallery
+function loopedGallery() {
+    return {
+        selectedCount: 0,
+        allSelected: false,
+        
+        updateSelection() {
+            const checkboxes = document.querySelectorAll('.looped-checkbox');
+            this.selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            this.allSelected = this.selectedCount > 0 && this.selectedCount === checkboxes.length;
+        },
+        
+        toggleSelectAllLooped() {
+            const checkboxes = document.querySelectorAll('.looped-checkbox');
+            const newState = !this.allSelected;
+            
+            checkboxes.forEach(cb => {
+                cb.checked = newState;
+            });
+            
+            this.updateSelection();
+        },
+        
+        async deleteSelectedLooped() {
+            const checkboxes = document.querySelectorAll('.looped-checkbox:checked');
+            const ids = Array.from(checkboxes).map(cb => cb.value);
+            
+            if (ids.length === 0) {
+                alert('No videos selected');
+                return;
+            }
+            
+            if (!confirm(`Delete ${ids.length} selected video(s)?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('{{ url_for("bulk_delete_looped_videos") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ video_ids: ids })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Refresh page
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + (result.message || 'Failed to delete videos'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error deleting videos');
+            }
+        }
+    };
+}
+
+function toggleSelectAll() {
+    const checkboxes = document.querySelectorAll('input[name="video_ids[]"]');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+    });
+}
+
+function deleteLoopedVideo(videoId) {
+    if (!confirm('Delete this looped video?')) {
+        return;
+    }
+    
+    fetch(`/delete-looped-video/${videoId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.message || 'Failed to delete video'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error deleting video');
+    });
+}
+
+function refreshStatus() {
+    fetch('{{ url_for("api_looping_status") }}')
+        .then(response => response.json())
+        .then(data => {
+            updateLoopedVideos(data);
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function updateLoopedVideos(loopedVideos) {
+    const container = document.getElementById('loopedVideosContainer');
+    
+    if (loopedVideos.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8">
+                <i class="fas fa-history text-slate-600 text-5xl mb-3"></i>
+                <p class="text-slate-400">No looped videos yet. Start looping videos above.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="space-y-3">';
+    loopedVideos.forEach(looped => {
+        let statusBadge = '';
+        if (looped.status === 'completed') {
+            statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30"><i class="fas fa-check-circle mr-1"></i>Completed</span>';
+        } else if (looped.status === 'processing') {
+            statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"><i class="fas fa-spinner fa-spin mr-1"></i>Processing</span>';
+        } else if (looped.status === 'failed') {
+            statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30"><i class="fas fa-times-circle mr-1"></i>Failed</span>';
+        }
+        
+        let deleteButton = '';
+        if (looped.status === 'completed') {
+            deleteButton = `
+                <form method="POST" action="/delete-looped-video/${looped.id}" class="ml-4" onsubmit="return confirm('Delete this looped video?')">
+                    <button type="submit" class="text-red-400 hover:text-red-300 transition-colors">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            `;
+        }
+        
+        html += `
+            <div class="glass-panel rounded-lg p-4 border border-dark-border" data-status="${looped.status}">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center mb-2">
+                            ${statusBadge}
+                            <span class="ml-3 font-medium text-slate-200">${looped.original_title}</span>
+                        </div>
+                        <div class="text-sm text-slate-400">
+                            <span class="mr-4">
+                                <i class="fas fa-clock mr-1"></i>
+                                ${looped.loop_duration_minutes} minutes
+                            </span>
+                            ${looped.status === 'completed' && looped.output_filename ? `
+                                <span class="mr-4">
+                                    <i class="fas fa-file mr-1"></i>
+                                    ${looped.output_filename}
+                                </span>
+                            ` : ''}
+                            ${looped.error ? `
+                                <span class="text-red-400">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                                    ${looped.error.substring(0, 100)}
+                                </span>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ${deleteButton}
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+// Auto-refresh every 5 seconds if there are processing videos
+let autoRefreshInterval = setInterval(() => {
+    const processingVideos = document.querySelectorAll('[data-status="processing"]');
+    if (processingVideos.length > 0) {
+        refreshStatus();
+    }
+}, 5000);
+
+// Show notification about background processing
+window.addEventListener('DOMContentLoaded', function() {
+    const processingVideos = document.querySelectorAll('[data-status="processing"]');
+    if (processingVideos.length > 0) {
+        // Show info that process is running in background
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'fixed bottom-4 right-4 bg-yellow-500/90 text-white px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
+        infoDiv.innerHTML = `
+            <div class="flex items-start">
+                <i class="fas fa-spinner fa-spin mr-2 mt-0.5"></i>
+                <div class="text-sm">
+                    <strong>Processing ${processingVideos.length} video(s)</strong><br>
+                    <span class="text-xs">This page auto-refreshes. You can safely close this tab - processing continues on server!</span>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-white hover:text-gray-200">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        document.body.appendChild(infoDiv);
+        
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+            infoDiv.style.transition = 'opacity 0.5s';
+            infoDiv.style.opacity = '0';
+            setTimeout(() => infoDiv.remove(), 500);
+        }, 10000);
+    }
+});
+</script>
+{% endblock %}

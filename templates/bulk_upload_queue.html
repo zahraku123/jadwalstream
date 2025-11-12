@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Queue - YouTube Scheduler{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="mb-6 flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-white mb-2">
+                <i class="fas fa-cloud-upload-alt text-blue-400 mr-2"></i>
+                Upload Queue
+            </h1>
+            <p class="text-slate-400">Manage and monitor YouTube uploads</p>
+        </div>
+
+        <div class="flex space-x-3">
+            <button onclick="refreshQueue()" class="inline-flex items-center px-4 py-2 border border-cyan-500/50 text-sm font-medium rounded-lg text-cyan-400 hover:bg-cyan-500/10 focus:outline-none transition-all">
+                <i class="fas fa-sync-alt mr-2"></i>
+                Refresh
+            </button>
+
+            {% if queue %}
+            <form method="POST" action="{{ url_for('start_bulk_upload') }}" class="inline">
+                <button type="submit" 
+                        onclick="return confirm('Start uploading all queued videos to YouTube?')"
+                        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all">
+                    <i class="fas fa-play mr-2"></i>
+                    Upload All Now
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- YouTube Limits Warning -->
+    <div class="glass-panel rounded-xl p-4 border border-yellow-500/30 mb-6">
+        <div class="flex items-start">
+            <i class="fas fa-exclamation-triangle text-yellow-400 text-xl mr-3 mt-0.5"></i>
+            <div class="flex-1">
+                <h3 class="text-sm font-semibold text-yellow-400 mb-3">
+                    <i class="fas fa-youtube text-red-500 mr-1"></i>
+                    YouTube Upload Limits & Quotas
+                </h3>
+                
+                <!-- Duration Limits -->
+                <div class="mb-3">
+                    <h4 class="text-xs font-semibold text-slate-300 mb-1">📹 Video Duration Limits:</h4>
+                    <div class="text-xs text-slate-400 space-y-1 ml-4">
+                        <p>• <strong>Unverified Account:</strong> Max 15 minutes (900 seconds)</p>
+                        <p>• <strong>Verified Account:</strong> Max 12 hours (43,200 seconds)</p>
+                        <p class="text-cyan-400">
+                            → <a href="https://www.youtube.com/verify" target="_blank" class="underline hover:text-cyan-300">Verify your account here</a>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Upload Quota -->
+                <div class="mb-3">
+                    <h4 class="text-xs font-semibold text-slate-300 mb-1">📊 Daily Upload Quota:</h4>
+                    <div class="text-xs text-slate-400 space-y-1 ml-4">
+                        <p>• <strong>Default Limit:</strong> 6 uploads per 24 hours</p>
+                        <p>• <strong>Quota Reset:</strong> Every day at midnight Pacific Time (PT)</p>
+                        <p>• <strong>Error Message:</strong> "The user has exceeded the number of videos they may upload"</p>
+                        <p class="text-orange-400">
+                            → <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" class="underline hover:text-orange-300">Request quota increase here</a>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- API Quota -->
+                <div>
+                    <h4 class="text-xs font-semibold text-slate-300 mb-1">⚡ API Call Quota:</h4>
+                    <div class="text-xs text-slate-400 space-y-1 ml-4">
+                        <p>• <strong>Default Limit:</strong> 10,000 units per day</p>
+                        <p>• <strong>Video Upload Cost:</strong> 1,600 units per video</p>
+                        <p>• <strong>Max Videos:</strong> ~6 uploads before hitting quota</p>
+                        <p class="text-cyan-400">
+                            → <a href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas" target="_blank" class="underline hover:text-cyan-300">Check quota usage</a>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Pro Tips -->
+                <div class="mt-3 p-2 bg-blue-500/10 border border-blue-500/30 rounded">
+                    <p class="text-xs text-blue-300">
+                        <i class="fas fa-lightbulb mr-1"></i>
+                        <strong>Pro Tips:</strong> Use Auto Upload Scheduler with 2-4 hour spacing to spread uploads across the day. Request quota increase if you need more than 6 uploads daily.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto Upload Scheduler Card -->
+    <div class="glass-panel rounded-xl p-6 border border-purple-500/20 mb-6" x-data="autoScheduler()">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-xl font-semibold text-white flex items-center">
+                    <i class="fas fa-robot text-purple-400 mr-2"></i>
+                    Auto Upload Scheduler
+                </h2>
+                <p class="text-sm text-slate-400 mt-1">Automatically upload videos at the right time</p>
+            </div>
+            
+            <!-- Toggle Switch -->
+            <div class="flex items-center space-x-3">
+                <span class="text-sm" :class="enabled ? 'text-green-400' : 'text-slate-400'" x-text="enabled ? 'ON' : 'OFF'"></span>
+                <button @click="toggleScheduler()" 
+                        class="relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                        :class="enabled ? 'bg-purple-600' : 'bg-gray-600'">
+                    <span class="pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                          :class="enabled ? 'translate-x-6' : 'translate-x-0'"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Settings (show when enabled) -->
+        <div x-show="enabled" x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-dark-card/50 rounded-lg border border-dark-border">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-clock mr-1 text-yellow-400"></i>
+                    Upload Offset (hours before publish)
+                </label>
+                <input type="number" 
+                       x-model="uploadOffsetHours" 
+                       @change="saveSettings()"
+                       min="1" 
+                       max="24"
+                       class="w-full px-4 py-2 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500">
+                <p class="text-xs text-slate-400 mt-1">Video will be uploaded X hours before scheduled time</p>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-refresh mr-1 text-cyan-400"></i>
+                    Check Interval (minutes)
+                </label>
+                <input type="number" 
+                       x-model="checkIntervalMinutes" 
+                       @change="saveSettings()"
+                       min="1" 
+                       max="60"
+                       class="w-full px-4 py-2 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500">
+                <p class="text-xs text-slate-400 mt-1">How often to check for videos ready to upload</p>
+            </div>
+        </div>
+
+        <!-- Info Box -->
+        <div class="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div class="flex items-start">
+                <i class="fas fa-info-circle text-blue-400 mt-0.5 mr-2"></i>
+                <div class="text-sm text-blue-300">
+                    <template x-if="enabled">
+                        <p>Auto scheduler is <strong>ACTIVE</strong>. Videos will automatically upload <span x-text="uploadOffsetHours"></span> hours before their scheduled publish time. Checking every <span x-text="checkIntervalMinutes"></span> minutes.</p>
+                    </template>
+                    <template x-if="!enabled">
+                        <p>Auto scheduler is <strong>OFF</strong>. You need to manually click "Upload All Now" to upload videos.</p>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="glass-panel rounded-xl p-4 border border-blue-500/20">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 p-3 bg-blue-600/20 rounded-lg">
+                    <i class="fas fa-clock text-blue-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-slate-400">Queued</p>
+                    <p class="text-2xl font-bold text-white" id="stat-queued">
+                        {{ queue|selectattr('status', 'equalto', 'queued')|list|length }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4 border border-yellow-500/20">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 p-3 bg-yellow-600/20 rounded-lg">
+                    <i class="fas fa-upload text-yellow-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-slate-400">Uploading</p>
+                    <p class="text-2xl font-bold text-white" id="stat-uploading">
+                        {{ queue|selectattr('status', 'equalto', 'uploading')|list|length }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4 border border-green-500/20">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 p-3 bg-green-600/20 rounded-lg">
+                    <i class="fas fa-check-circle text-green-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-slate-400">Completed</p>
+                    <p class="text-2xl font-bold text-white" id="stat-completed">
+                        {{ queue|selectattr('status', 'equalto', 'completed')|list|length }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4 border border-red-500/20">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 p-3 bg-red-600/20 rounded-lg">
+                    <i class="fas fa-exclamation-circle text-red-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-slate-400">Failed</p>
+                    <p class="text-2xl font-bold text-white" id="stat-failed">
+                        {{ queue|selectattr('status', 'equalto', 'failed')|list|length }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Queue Items -->
+    <div class="glass-panel rounded-xl p-6 border border-blue-500/20" x-data="queueItems()">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold text-white">
+                <i class="fas fa-list mr-2 text-cyan-400"></i>
+                Queue Items
+                <span x-show="selectedItems.length > 0" class="text-sm text-slate-400 ml-2">
+                    (<span x-text="selectedItems.length"></span> selected)
+                </span>
+            </h2>
+
+            <div class="flex gap-2">
+                <!-- Queue Again Button -->
+                <button @click="requeueSelected()" 
+                        x-show="selectedItems.length > 0"
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-orange-600 hover:bg-orange-700 transition-all">
+                    <i class="fas fa-redo mr-2"></i>
+                    Queue Again
+                </button>
+
+                {% if queue|selectattr('status', 'equalto', 'completed')|list|length > 0 %}
+                <form method="POST" action="{{ url_for('clear_completed_queue') }}" class="inline">
+                    <button type="submit" 
+                            onclick="return confirm('Clear all completed items from queue?')"
+                            class="text-sm text-red-400 hover:text-red-300 transition-colors">
+                        <i class="fas fa-trash mr-1"></i>
+                        Clear Completed
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="queueContainer">
+            {% if queue %}
+            <div class="space-y-3">
+                {% for item in queue %}
+                <div class="glass-panel rounded-lg p-4 border border-dark-border hover:border-blue-500/30 transition-all" data-item-id="{{ item.id }}" data-status="{{ item.status }}">
+                    <div class="flex items-start gap-3">
+                        <!-- Checkbox (only for completed/failed items) -->
+                        {% if item.status in ['completed', 'failed'] %}
+                        <div class="flex-shrink-0 pt-1">
+                            <input type="checkbox" 
+                                   x-model="selectedItems" 
+                                   value="{{ item.id }}"
+                                   class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-600 rounded bg-dark-card">
+                        </div>
+                        {% endif %}
+
+                        <div class="flex-1">
+                            <!-- Status Badge -->
+                            <div class="flex items-center mb-2">
+                                {% if item.status == 'queued' %}
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                    <i class="fas fa-clock mr-1"></i>
+                                    Queued
+                                </span>
+                                {% elif item.status == 'uploading' %}
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                    <i class="fas fa-spinner fa-spin mr-1"></i>
+                                    Uploading
+                                </span>
+                                {% elif item.status == 'completed' %}
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                                    <i class="fas fa-check-circle mr-1"></i>
+                                    Completed
+                                </span>
+                                {% elif item.status == 'failed' %}
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+                                    <i class="fas fa-times-circle mr-1"></i>
+                                    Failed
+                                </span>
+                                {% endif %}
+
+                                <span class="ml-3 font-semibold text-slate-200">{{ item.title }}</span>
+                            </div>
+
+                            <!-- Video Details -->
+                            <div class="text-sm text-slate-400 space-y-1 mb-2">
+                                <div>
+                                    <i class="fas fa-calendar mr-1 text-cyan-400"></i>
+                                    Scheduled: {{ item.scheduled_publish_time }}
+                                </div>
+                                <div>
+                                    <i class="fas fa-eye mr-1 text-green-400"></i>
+                                    Privacy: <span class="capitalize">{{ item.privacy_status }}</span>
+                                </div>
+                                {% if item.get('youtube_video_id') %}
+                                <div>
+                                    <i class="fas fa-link mr-1 text-blue-400"></i>
+                                    <a href="{{ item.video_url }}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">
+                                        View on YouTube
+                                    </a>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Description Preview -->
+                            <div class="text-xs text-slate-500 line-clamp-2">
+                                {{ item.description[:150] }}...
+                            </div>
+
+                            <!-- Upload Progress -->
+                            {% if item.status == 'uploading' and item.get('upload_progress') %}
+                            <div class="mt-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-xs text-slate-400">Upload Progress</span>
+                                    <span class="text-xs text-slate-400">{{ item.upload_progress }}%</span>
+                                </div>
+                                <div class="w-full bg-dark-card rounded-full h-2">
+                                    <div class="bg-yellow-500 h-2 rounded-full transition-all" style="width: {{ item.upload_progress }}%"></div>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Error Message -->
+                            {% if item.get('error') %}
+                            <div class="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>
+                                {{ item.error[:200] }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="ml-4 flex space-x-2">
+                            {% if item.status in ['queued', 'failed'] %}
+                            <form method="POST" action="{{ url_for('delete_queue_item', item_id=item.id) }}" onsubmit="return confirm('Delete this item from queue?')">
+                                <button type="submit" class="text-red-400 hover:text-red-300 transition-colors p-2">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-inbox text-slate-600 text-6xl mb-4"></i>
+                <p class="text-slate-400 text-lg mb-2">No videos in upload queue</p>
+                <p class="text-slate-500 mb-6">Add videos from Bulk Scheduling page</p>
+                <a href="{{ url_for('bulk_scheduling') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all">
+                    <i class="fas fa-plus mr-2"></i>
+                    Go to Bulk Scheduling
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function autoScheduler() {
+    return {
+        enabled: {{ 'true' if auto_config.get('enabled') else 'false' }},
+        uploadOffsetHours: {{ auto_config.get('upload_offset_hours', 2) }},
+        checkIntervalMinutes: {{ auto_config.get('check_interval_minutes', 5) }},
+        
+        async toggleScheduler() {
+            this.enabled = !this.enabled;
+            await this.saveSettings();
+        },
+        
+        async saveSettings() {
+            try {
+                const response = await fetch('{{ url_for("toggle_auto_upload") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        enabled: this.enabled,
+                        upload_offset_hours: this.uploadOffsetHours,
+                        check_interval_minutes: this.checkIntervalMinutes
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show toast notification (optional)
+                    console.log('Auto upload scheduler settings saved:', result.config);
+                } else {
+                    alert('Failed to save settings');
+                    // Revert toggle
+                    this.enabled = !this.enabled;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error saving settings');
+                // Revert toggle
+                this.enabled = !this.enabled;
+            }
+        }
+    };
+}
+
+function refreshQueue() {
+    fetch('{{ url_for("api_upload_queue_status") }}')
+        .then(response => response.json())
+        .then(data => {
+            updateQueue(data);
+            updateStats(data);
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function updateStats(queue) {
+    const stats = {
+        queued: queue.filter(item => item.status === 'queued').length,
+        uploading: queue.filter(item => item.status === 'uploading').length,
+        completed: queue.filter(item => item.status === 'completed').length,
+        failed: queue.filter(item => item.status === 'failed').length
+    };
+
+    document.getElementById('stat-queued').textContent = stats.queued;
+    document.getElementById('stat-uploading').textContent = stats.uploading;
+    document.getElementById('stat-completed').textContent = stats.completed;
+    document.getElementById('stat-failed').textContent = stats.failed;
+}
+
+function updateQueue(queue) {
+    const container = document.getElementById('queueContainer');
+    
+    if (queue.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-12">
+                <i class="fas fa-inbox text-slate-600 text-6xl mb-4"></i>
+                <p class="text-slate-400 text-lg mb-2">No videos in upload queue</p>
+                <p class="text-slate-500 mb-6">Add videos from Bulk Scheduling page</p>
+                <a href="{{ url_for('bulk_scheduling') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all">
+                    <i class="fas fa-plus mr-2"></i>
+                    Go to Bulk Scheduling
+                </a>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '<div class="space-y-3">';
+    
+    queue.forEach(item => {
+        let statusBadge = '';
+        if (item.status === 'queued') {
+            statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30"><i class="fas fa-clock mr-1"></i>Queued</span>';
+        } else if (item.status === 'uploading') {
+            statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"><i class="fas fa-spinner fa-spin mr-1"></i>Uploading</span>';
+        } else if (item.status === 'completed') {
+            statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30"><i class="fas fa-check-circle mr-1"></i>Completed</span>';
+        } else if (item.status === 'failed') {
+            statusBadge = '<span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30"><i class="fas fa-times-circle mr-1"></i>Failed</span>';
+        }
+
+        let progressBar = '';
+        if (item.status === 'uploading' && item.upload_progress) {
+            progressBar = `
+                <div class="mt-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400">Upload Progress</span>
+                        <span class="text-xs text-slate-400">${item.upload_progress}%</span>
+                    </div>
+                    <div class="w-full bg-dark-card rounded-full h-2">
+                        <div class="bg-yellow-500 h-2 rounded-full transition-all" style="width: ${item.upload_progress}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        let youtubeLink = '';
+        if (item.youtube_video_id && item.video_url) {
+            youtubeLink = `
+                <div>
+                    <i class="fas fa-link mr-1 text-blue-400"></i>
+                    <a href="${item.video_url}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">
+                        View on YouTube
+                    </a>
+                </div>
+            `;
+        }
+
+        let errorMessage = '';
+        if (item.error) {
+            errorMessage = `
+                <div class="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    ${item.error.substring(0, 200)}
+                </div>
+            `;
+        }
+
+        let deleteButton = '';
+        if (item.status === 'queued' || item.status === 'failed') {
+            deleteButton = `
+                <form method="POST" action="/delete-queue-item/${item.id}" onsubmit="return confirm('Delete this item from queue?')">
+                    <button type="submit" class="text-red-400 hover:text-red-300 transition-colors p-2">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            `;
+        }
+
+        html += `
+            <div class="glass-panel rounded-lg p-4 border border-dark-border hover:border-blue-500/30 transition-all" data-item-id="${item.id}" data-status="${item.status}">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center mb-2">
+                            ${statusBadge}
+                            <span class="ml-3 font-semibold text-slate-200">${item.title}</span>
+                        </div>
+                        <div class="text-sm text-slate-400 space-y-1 mb-2">
+                            <div>
+                                <i class="fas fa-calendar mr-1 text-cyan-400"></i>
+                                Scheduled: ${item.scheduled_publish_time}
+                            </div>
+                            <div>
+                                <i class="fas fa-eye mr-1 text-green-400"></i>
+                                Privacy: <span class="capitalize">${item.privacy_status}</span>
+                            </div>
+                            ${youtubeLink}
+                        </div>
+                        <div class="text-xs text-slate-500 line-clamp-2">
+                            ${item.description.substring(0, 150)}...
+                        </div>
+                        ${progressBar}
+                        ${errorMessage}
+                    </div>
+                    <div class="ml-4 flex space-x-2">
+                        ${deleteButton}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// Auto-refresh every 5 seconds if there are uploading videos
+setInterval(() => {
+    const uploadingItems = document.querySelectorAll('[data-status="uploading"]');
+    if (uploadingItems.length > 0) {
+        refreshQueue();
+    }
+}, 5000);
+
+// Alpine.js component for queue item selection
+function queueItems() {
+    return {
+        selectedItems: [],
+
+        async requeueSelected() {
+            if (this.selectedItems.length === 0) {
+                alert('Please select items to queue again');
+                return;
+            }
+
+            if (!confirm(`Queue ${this.selectedItems.length} item(s) again?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('{{ url_for("requeue_items") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        item_ids: this.selectedItems
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(`✅ ${result.message}`);
+                    this.selectedItems = [];
+                    window.location.reload();
+                } else {
+                    alert('❌ Error: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('❌ Error requeueing items: ' + error.message);
+            }
+        }
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,5 @@
+{
+    "enabled": false,
+    "upload_offset_hours": 2,
+    "check_interval_minutes": 5
+}

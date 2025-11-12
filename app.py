@@ -160,7 +160,7 @@ def get_token_path(token_name):
 
 # Create a static folder link to videos folder for serving videos
 app.config['UPLOAD_FOLDER'] = VIDEO_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max upload
+app.config['MAX_CONTENT_LENGTH'] = 2048 * 1024 * 1024  # 2GB max upload (total for all files)
 
 # Video database file
 VIDEO_DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'video_database.json')
@@ -581,7 +581,11 @@ def get_video_database():
         return []
     try:
         with open(VIDEO_DB_FILE, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Ensure data is a list, not a dict
+            if isinstance(data, dict):
+                return []
+            return data if isinstance(data, list) else []
     except:
         return []
 
@@ -594,7 +598,11 @@ def get_thumbnail_database():
         return []
     try:
         with open(THUMBNAIL_DB_FILE, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Ensure data is a list, not a dict
+            if isinstance(data, dict):
+                return []
+            return data if isinstance(data, list) else []
     except:
         return []
 
@@ -1296,64 +1304,97 @@ def video_gallery():
 @login_required
 @demo_readonly
 def upload_video():
-    if 'video_file' not in request.files:
-        flash('No file part', 'danger')
+    # Check if multiple files or single file
+    files = request.files.getlist('video_files')
+    
+    # Fallback to old single file upload for compatibility
+    if not files or (len(files) == 1 and files[0].filename == ''):
+        if 'video_file' in request.files:
+            files = [request.files['video_file']]
+        else:
+            flash('No files selected', 'danger')
+            return redirect(url_for('video_gallery'))
+    
+    if not files or all(f.filename == '' for f in files):
+        flash('No files selected', 'danger')
         return redirect(url_for('video_gallery'))
     
-    file = request.files['video_file']
-    if file.filename == '':
-        flash('No selected file', 'danger')
-        return redirect(url_for('video_gallery'))
+    uploaded_count = 0
+    failed_count = 0
+    videos_db = get_video_database()
     
-    if file and allowed_file(file.filename):
-        # Generate unique filename
-        original_filename = secure_filename(file.filename)
-        file_extension = original_filename.rsplit('.', 1)[1].lower()
-        unique_filename = f"{uuid.uuid4()}.{file_extension}"
-        
-        # Save the file
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-        file.save(file_path)
-        
-        # Generate thumbnail from first frame
-        thumbnail_filename = None
-        try:
-            thumbnail_filename = f"{uuid.uuid4()}.jpg"
-            thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
+    for file in files:
+        if file.filename == '':
+            continue
             
-            # Use ffmpeg to extract first frame
-            ffmpeg_cmd = [
-                'ffmpeg',
-                '-i', file_path,
-                '-ss', '00:00:01',
-                '-vframes', '1',
-                '-q:v', '2',
-                thumbnail_path
-            ]
-            subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
-        except Exception as e:
-            print(f"Could not generate thumbnail: {e}")
-            thumbnail_filename = None
-        
-        # Add to database
-        video_title = request.form.get('video_title', 'Untitled Video')
-        videos = get_video_database()
-        videos.append({
-            'id': str(uuid.uuid4()),
-            'title': video_title,
-            'filename': unique_filename,
-            'original_filename': original_filename,
-            'thumbnail': thumbnail_filename,
-            'date_added': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'source': 'local'
-        })
-        save_video_database(videos)
-        
-        flash('Video uploaded successfully!', 'success')
-        return redirect(url_for('video_gallery'))
+        if file and allowed_file(file.filename):
+            try:
+                # Generate unique filename
+                original_filename = secure_filename(file.filename)
+                file_extension = original_filename.rsplit('.', 1)[1].lower()
+                unique_filename = f"{uuid.uuid4()}.{file_extension}"
+                
+                # Save the file
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                file.save(file_path)
+                
+                # Generate thumbnail from first frame
+                thumbnail_filename = None
+                try:
+                    thumbnail_filename = f"{uuid.uuid4()}.jpg"
+                    thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
+                    
+                    # Use ffmpeg to extract first frame
+                    ffmpeg_cmd = [
+                        'ffmpeg',
+                        '-i', file_path,
+                        '-ss', '00:00:01',
+                        '-vframes', '1',
+                        '-q:v', '2',
+                        thumbnail_path
+                    ]
+                    subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
+                except Exception as e:
+                    logging.error(f"Could not generate thumbnail for {original_filename}: {e}")
+                    thumbnail_filename = None
+                
+                # Use original filename as title (without extension)
+                video_title = original_filename.rsplit('.', 1)[0]
+                
+                # Add to database
+                videos_db.append({
+                    'id': str(uuid.uuid4()),
+                    'title': video_title,
+                    'filename': unique_filename,
+                    'original_filename': original_filename,
+                    'thumbnail': thumbnail_filename,
+                    'date_added': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'source': 'local'
+                })
+                
+                uploaded_count += 1
+                logging.info(f"Successfully uploaded: {original_filename}")
+                
+            except Exception as e:
+                failed_count += 1
+                logging.error(f"Failed to upload {file.filename}: {e}")
+        else:
+            failed_count += 1
+            logging.warning(f"Invalid file type: {file.filename}")
     
-    flash('Invalid file type. Allowed types: ' + ', '.join(ALLOWED_EXTENSIONS), 'danger')
-    return redirect(url_for('video_gallery'))
+    # Save database once after all uploads
+    if uploaded_count > 0:
+        save_video_database(videos_db)
+    
+    # Always return JSON response (form submission via AJAX)
+    if uploaded_count > 0 and failed_count == 0:
+        message = f'{uploaded_count} video{"s" if uploaded_count > 1 else ""} uploaded successfully!'
+        return jsonify({'success': True, 'message': message, 'uploaded': uploaded_count}), 200
+    elif uploaded_count > 0 and failed_count > 0:
+        message = f'{uploaded_count} uploaded, {failed_count} failed'
+        return jsonify({'success': True, 'message': message, 'uploaded': uploaded_count, 'failed': failed_count}), 200
+    else:
+        return jsonify({'success': False, 'message': 'All uploads failed'}), 400
 
 @app.route('/import-from-drive', methods=['POST'])
 @login_required
@@ -2059,11 +2100,39 @@ def create_token():
 def complete_token():
     try:
         token_name = request.form.get('token_name', 'token.json')
-        auth_code = request.form.get('auth_code', '').strip()
+        auth_input = request.form.get('auth_code', '').strip()
         
-        if not auth_code:
+        if not auth_input:
             flash('Kode authorization tidak boleh kosong', 'error')
             return redirect(url_for('tokens'))
+        
+        # Extract authorization code from input
+        # User can paste either:
+        # 1. Full URL: http://localhost:5001/?code=4/0AVG7fiR...&scope=...
+        # 2. Just the code: 4/0AVG7fiR...
+        
+        auth_code = auth_input
+        
+        # Check if input is a URL
+        if 'code=' in auth_input:
+            # Extract code parameter from URL
+            try:
+                from urllib.parse import urlparse, parse_qs
+                
+                # Parse URL
+                parsed = urlparse(auth_input)
+                params = parse_qs(parsed.query)
+                
+                if 'code' in params and params['code']:
+                    auth_code = params['code'][0]
+                    logging.info(f"Extracted authorization code from URL")
+                else:
+                    flash('Tidak dapat menemukan parameter "code" di URL', 'error')
+                    return redirect(url_for('tokens'))
+            except Exception as e:
+                logging.error(f"Error parsing URL: {e}")
+                flash(f'Error parsing URL: {str(e)}', 'error')
+                return redirect(url_for('tokens'))
         
         # Create flow again and fetch token
         flow = Flow.from_client_secrets_file(
@@ -2324,6 +2393,1026 @@ def telegram_test():
     success, message = telegram_notifier.test_connection()
     return jsonify({'success': success, 'message': message})
 
+# ==== New Features: Video Looping, AI Metadata, Bulk Upload ====
+
+# Constants for new features
+LOOPED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos', 'done')
+LOOPED_DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'looped_videos.json')
+BULK_UPLOAD_DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bulk_upload_queue.json')
+AUTO_UPLOAD_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auto_upload_config.json')
+METADATA_EXCEL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metadata_templates.xlsx')
+
+# Ensure folders exist
+os.makedirs(LOOPED_FOLDER, exist_ok=True)
+
+def get_looped_videos():
+    """Get list of looped videos"""
+    if not os.path.exists(LOOPED_DB_FILE):
+        return []
+    try:
+        with open(LOOPED_DB_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_looped_videos(looped_videos):
+    """Save looped videos database"""
+    with open(LOOPED_DB_FILE, 'w') as f:
+        json.dump(looped_videos, f, indent=4)
+
+def get_bulk_upload_queue():
+    """Get bulk upload queue"""
+    if not os.path.exists(BULK_UPLOAD_DB_FILE):
+        return []
+    try:
+        with open(BULK_UPLOAD_DB_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_bulk_upload_queue(queue):
+    """Save bulk upload queue"""
+    with open(BULK_UPLOAD_DB_FILE, 'w') as f:
+        json.dump(queue, f, indent=4)
+
+def load_gemini_config():
+    """Load Gemini API configuration"""
+    config_file = 'gemini_config.json'
+    if not os.path.exists(config_file):
+        return None
+    try:
+        with open(config_file, 'r') as f:
+            return json.load(f)
+    except:
+        return None
+
+def get_metadata_from_excel():
+    """Load metadata templates from Excel file"""
+    if not os.path.exists(METADATA_EXCEL_FILE):
+        return []
+    
+    try:
+        import openpyxl
+        workbook = openpyxl.load_workbook(METADATA_EXCEL_FILE)
+        sheet = workbook.active
+        
+        metadata_list = []
+        # Skip header row, start from row 2
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            if row[0]:  # If title exists
+                metadata_list.append({
+                    'title': str(row[0]) if row[0] else '',
+                    'description': str(row[1]) if row[1] else '',
+                    'tags': str(row[2]) if row[2] else ''
+                })
+        
+        return metadata_list
+    except Exception as e:
+        logging.error(f"Error reading Excel metadata: {e}")
+        return []
+
+def get_random_metadata(count=1):
+    """Get random metadata from Excel file"""
+    import random
+    
+    metadata_list = get_metadata_from_excel()
+    if not metadata_list:
+        return []
+    
+    # If requested count is more than available, allow duplicates
+    if count <= len(metadata_list):
+        return random.sample(metadata_list, count)
+    else:
+        return random.choices(metadata_list, k=count)
+
+def get_auto_upload_config():
+    """Get auto upload scheduler configuration"""
+    if not os.path.exists(AUTO_UPLOAD_CONFIG_FILE):
+        default_config = {
+            'enabled': False,
+            'upload_offset_hours': 2,
+            'check_interval_minutes': 5
+        }
+        with open(AUTO_UPLOAD_CONFIG_FILE, 'w') as f:
+            json.dump(default_config, f, indent=4)
+        return default_config
+    
+    try:
+        with open(AUTO_UPLOAD_CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 5}
+
+def save_auto_upload_config(config):
+    """Save auto upload scheduler configuration"""
+    with open(AUTO_UPLOAD_CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4)
+
+@app.route('/video-looping')
+@login_required
+def video_looping():
+    """Video looping page - bulk loop videos"""
+    videos = get_video_database()
+    looped_videos = get_looped_videos()
+    return render_template('video_looping.html', videos=videos, looped_videos=looped_videos)
+
+@app.route('/start-video-looping', methods=['POST'])
+@login_required
+@demo_readonly
+def start_video_looping():
+    """Start looping selected videos"""
+    video_ids = request.form.getlist('video_ids[]')
+    loop_duration = request.form.get('loop_duration', '60')  # Default 60 minutes
+    
+    if not video_ids:
+        flash('Pilih minimal satu video untuk di-loop', 'error')
+        return redirect(url_for('video_looping'))
+    
+    try:
+        loop_duration_minutes = int(loop_duration)
+        if loop_duration_minutes <= 0:
+            flash('Durasi loop harus lebih dari 0 menit', 'error')
+            return redirect(url_for('video_looping'))
+    except ValueError:
+        flash('Durasi loop tidak valid', 'error')
+        return redirect(url_for('video_looping'))
+    
+    videos = get_video_database()
+    looped_videos = get_looped_videos()
+    
+    for video_id in video_ids:
+        video = next((v for v in videos if v['id'] == video_id), None)
+        if not video:
+            continue
+        
+        # Create looped video entry
+        looped_id = str(uuid.uuid4())
+        looped_entry = {
+            'id': looped_id,
+            'original_video_id': video_id,
+            'original_filename': video['filename'],
+            'original_title': video['title'],
+            'loop_duration_minutes': loop_duration_minutes,
+            'status': 'processing',
+            'progress': 0,
+            'output_filename': None,
+            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        looped_videos.append(looped_entry)
+        
+        # Start looping process in background thread
+        def loop_video_background(entry, original_file):
+            try:
+                input_path = os.path.join(VIDEO_FOLDER, original_file)
+                output_filename = f"looped_{looped_id}.mp4"
+                output_path = os.path.join(LOOPED_FOLDER, output_filename)
+                
+                # Calculate loop duration in seconds
+                duration_seconds = loop_duration_minutes * 60
+                
+                # FFmpeg command to loop video
+                cmd = [
+                    'ffmpeg',
+                    '-stream_loop', '-1',  # Infinite loop
+                    '-i', input_path,
+                    '-t', str(duration_seconds),  # Duration
+                    '-c', 'copy',  # Copy codec (no re-encoding)
+                    '-y',  # Overwrite output file
+                    output_path
+                ]
+                
+                # Run ffmpeg
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                
+                # Wait for completion
+                stdout, stderr = process.communicate()
+                
+                if process.returncode == 0:
+                    # Success - update entry
+                    entry['status'] = 'completed'
+                    entry['progress'] = 100
+                    entry['output_filename'] = output_filename
+                    entry['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    # Failed
+                    entry['status'] = 'failed'
+                    entry['error'] = stderr.decode('utf-8')[:500]
+                
+                save_looped_videos(looped_videos)
+                
+            except Exception as e:
+                entry['status'] = 'failed'
+                entry['error'] = str(e)
+                save_looped_videos(looped_videos)
+        
+        # Start background thread
+        thread = threading.Thread(
+            target=loop_video_background,
+            args=(looped_entry, video['filename'])
+        )
+        thread.daemon = True
+        thread.start()
+    
+    save_looped_videos(looped_videos)
+    flash(f'{len(video_ids)} video sedang diproses untuk looping', 'success')
+    return redirect(url_for('video_looping'))
+
+@app.route('/api/looping-status')
+@login_required
+def api_looping_status():
+    """Get looping status for all videos"""
+    looped_videos = get_looped_videos()
+    return jsonify(looped_videos)
+
+@app.route('/serve-looped-video/<filename>')
+@login_required
+def serve_looped_video(filename):
+    """Serve looped video file"""
+    return send_from_directory(LOOPED_FOLDER, filename)
+
+@app.route('/delete-looped-video/<video_id>', methods=['POST'])
+@login_required
+@demo_readonly
+def delete_looped_video(video_id):
+    """Delete a single looped video"""
+    try:
+        looped_videos = get_looped_videos()
+        
+        video_to_delete = next((v for v in looped_videos if v['id'] == video_id), None)
+        if not video_to_delete:
+            return jsonify({'success': False, 'message': 'Video not found'})
+        
+        # Delete file if exists
+        if video_to_delete.get('output_filename'):
+            file_path = os.path.join(LOOPED_FOLDER, video_to_delete['output_filename'])
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    
+        # Remove from database
+        looped_videos = [v for v in looped_videos if v['id'] != video_id]
+        save_looped_videos(looped_videos)
+        
+        return jsonify({'success': True, 'message': 'Video deleted successfully'})
+    except Exception as e:
+        logging.error(f"Error deleting looped video: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/bulk-delete-looped-videos', methods=['POST'])
+@login_required
+@demo_readonly
+def bulk_delete_looped_videos():
+    """Delete multiple looped videos at once"""
+    try:
+        data = request.get_json()
+        video_ids = data.get('video_ids', [])
+        
+        if not video_ids:
+            return jsonify({'success': False, 'message': 'No videos selected'})
+        
+        looped_videos = get_looped_videos()
+        deleted_count = 0
+        
+        for video_id in video_ids:
+            video_to_delete = next((v for v in looped_videos if v['id'] == video_id), None)
+            if video_to_delete:
+                # Delete file if exists
+                if video_to_delete.get('output_filename'):
+                    file_path = os.path.join(LOOPED_FOLDER, video_to_delete['output_filename'])
+                    if os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                            deleted_count += 1
+                        except Exception as e:
+                            logging.error(f"Error deleting file {file_path}: {e}")
+        
+        # Remove all selected videos from database
+        looped_videos = [v for v in looped_videos if v['id'] not in video_ids]
+        save_looped_videos(looped_videos)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'{deleted_count} video(s) deleted successfully'
+        })
+    except Exception as e:
+        logging.error(f"Error bulk deleting looped videos: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/gemini-settings', methods=['GET', 'POST'])
+@login_required
+def gemini_settings():
+    """Gemini API settings page"""
+    role = getattr(current_user, 'role', 'demo')
+    if not role_can_manage(role):
+        flash('Access denied: Only admin can manage Gemini settings.', 'error')
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        api_key = request.form.get('api_key', '').strip()
+        model = request.form.get('model', 'gemini-2.5-flash').strip()
+        custom_prompt = request.form.get('custom_prompt', '').strip()
+        
+        config = {
+            'api_key': api_key,
+            'model': model,
+            'custom_prompt': custom_prompt or None
+        }
+        
+        with open('gemini_config.json', 'w') as f:
+            json.dump(config, f, indent=4)
+        
+        flash('Gemini API settings saved successfully!', 'success')
+        return redirect(url_for('gemini_settings'))
+    
+    config = load_gemini_config() or {}
+    metadata_count = len(get_metadata_from_excel())
+    config['metadata_count'] = metadata_count
+    return render_template('gemini_settings.html', config=config)
+
+@app.route('/bulk-scheduling')
+@login_required
+def bulk_scheduling():
+    """Bulk scheduling page with AI metadata generation"""
+    looped_videos = get_looped_videos()
+    # Only show completed looped videos
+    completed_videos = [v for v in looped_videos if v['status'] == 'completed']
+    
+    tokens = get_token_files()
+    thumbnails = get_thumbnail_database()
+    stream_mapping = get_stream_mapping()
+    
+    # Check if Gemini API is configured
+    gemini_config = load_gemini_config()
+    gemini_configured = gemini_config and gemini_config.get('api_key')
+    
+    # Check if metadata Excel exists
+    metadata_count = len(get_metadata_from_excel())
+    
+    return render_template('bulk_scheduling.html', 
+                         videos=completed_videos,
+                         tokens=tokens,
+                         thumbnails=thumbnails,
+                         stream_mapping=stream_mapping,
+                         gemini_configured=gemini_configured,
+                         metadata_count=metadata_count)
+
+@app.route('/generate-ai-metadata', methods=['POST'])
+@login_required
+@demo_readonly
+def generate_ai_metadata():
+    """Generate metadata using Gemini AI"""
+    video_ids = request.form.getlist('video_ids[]')
+    keyword = request.form.get('keyword', '').strip()
+    
+    if not video_ids:
+        return jsonify({'success': False, 'error': 'Pilih minimal satu video'}), 400
+    
+    if not keyword:
+        return jsonify({'success': False, 'error': 'Keyword harus diisi'}), 400
+    
+    # Load Gemini config
+    gemini_config = load_gemini_config()
+    if not gemini_config or not gemini_config.get('api_key'):
+        return jsonify({'success': False, 'error': 'Gemini API belum dikonfigurasi'}), 400
+    
+    try:
+        import google.generativeai as genai
+        
+        # Configure Gemini
+        genai.configure(api_key=gemini_config['api_key'])
+        model_name = gemini_config.get('model', 'gemini-2.5-flash')
+        model = genai.GenerativeModel(model_name)
+        
+        looped_videos = get_looped_videos()
+        generated_metadata = []
+        
+        for idx, video_id in enumerate(video_ids, 1):
+            video = next((v for v in looped_videos if v['id'] == video_id), None)
+            if not video:
+                continue
+            
+            # Generate prompt for Gemini
+            # Use custom prompt if available
+            custom_prompt = gemini_config.get('custom_prompt')
+            
+            if custom_prompt:
+                # Replace placeholders in custom prompt
+                prompt = custom_prompt.replace('{keyword}', keyword)
+                prompt = prompt.replace('{index}', str(idx))
+                prompt = prompt.replace('{original_title}', video.get('original_title', 'Unknown'))
+            else:
+                # Default prompt
+                prompt = f"""Generate YouTube video metadata for video #{idx} based on the keyword: "{keyword}"
+
+Original video title: {video.get('original_title', 'Unknown')}
+
+Please provide:
+1. A catchy YouTube title (max 100 characters)
+2. A detailed description (2-3 paragraphs)
+3. 10-15 relevant tags (comma separated)
+
+Format your response as JSON:
+{{
+    "title": "video title here",
+    "description": "video description here",
+    "tags": "tag1, tag2, tag3, ..."
+}}
+"""
+            
+            # Generate content
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            # Try to parse JSON from response
+            # Sometimes Gemini wraps JSON in markdown code blocks
+            if '```json' in response_text:
+                response_text = response_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in response_text:
+                response_text = response_text.split('```')[1].split('```')[0].strip()
+            
+            metadata = json.loads(response_text)
+            
+            generated_metadata.append({
+                'video_id': video_id,
+                'title': metadata.get('title', f'{keyword} - Video {idx}'),
+                'description': metadata.get('description', ''),
+                'tags': metadata.get('tags', keyword)
+            })
+        
+        return jsonify({'success': True, 'metadata': generated_metadata})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/generate-random-metadata', methods=['POST'])
+@login_required
+@demo_readonly
+def generate_random_metadata():
+    """Generate metadata using random selection from Excel"""
+    video_ids = request.form.getlist('video_ids[]')
+    
+    if not video_ids:
+        return jsonify({'success': False, 'error': 'Pilih minimal satu video'}), 400
+    
+    try:
+        # Get random metadata
+        random_metadata = get_random_metadata(count=len(video_ids))
+        
+        if not random_metadata:
+            return jsonify({'success': False, 'error': 'File Excel metadata tidak ditemukan atau kosong. Upload file Excel di halaman Gemini Settings.'}), 400
+        
+        generated_metadata = []
+        for idx, video_id in enumerate(video_ids):
+            metadata = random_metadata[idx]
+            generated_metadata.append({
+                'video_id': video_id,
+                'title': metadata['title'],
+                'description': metadata['description'],
+                'tags': metadata['tags']
+            })
+        
+        return jsonify({'success': True, 'metadata': generated_metadata})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/upload-metadata-excel', methods=['POST'])
+@login_required
+@demo_readonly
+def upload_metadata_excel():
+    """Upload Excel file with metadata templates"""
+    if 'excel_file' not in request.files:
+        flash('No file uploaded', 'error')
+        return redirect(url_for('gemini_settings'))
+    
+    file = request.files['excel_file']
+    if file.filename == '':
+        flash('No file selected', 'error')
+        return redirect(url_for('gemini_settings'))
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        flash('File must be Excel format (.xlsx or .xls)', 'error')
+        return redirect(url_for('gemini_settings'))
+    
+    try:
+        # Save the file
+        file.save(METADATA_EXCEL_FILE)
+        
+        # Validate the file
+        metadata_list = get_metadata_from_excel()
+        
+        if not metadata_list:
+            os.remove(METADATA_EXCEL_FILE)
+            flash('Excel file is empty or invalid format. Please check: Column A=Title, B=Description, C=Tags', 'error')
+            return redirect(url_for('gemini_settings'))
+        
+        flash(f'Excel metadata uploaded successfully! {len(metadata_list)} templates loaded.', 'success')
+        return redirect(url_for('gemini_settings'))
+        
+    except Exception as e:
+        flash(f'Error uploading Excel: {str(e)}', 'error')
+        return redirect(url_for('gemini_settings'))
+
+@app.route('/save-bulk-upload-queue', methods=['POST'])
+@login_required
+@demo_readonly
+def save_bulk_upload_queue_route():
+    """Save videos to upload queue with metadata"""
+    data = request.get_json()
+    
+    if not data or not data.get('videos'):
+        return jsonify({'success': False, 'error': 'Data tidak valid'}), 400
+    
+    videos = data['videos']
+    start_date_str = data.get('start_date')
+    token_file = data.get('token_file')
+    stream_id = data.get('stream_id')
+    thumbnail_id = data.get('thumbnail_id')
+    privacy_status = data.get('privacy_status', 'unlisted')
+    
+    if not start_date_str or not token_file:
+        return jsonify({'success': False, 'error': 'Tanggal awal dan token harus diisi'}), 400
+    
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%dT%H:%M')
+    except:
+        return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
+    
+    # Get looped videos database
+    looped_videos = get_looped_videos()
+    
+    # Create upload queue
+    queue = get_bulk_upload_queue()
+    
+    for idx, video_data in enumerate(videos):
+        video_id = video_data['video_id']
+        video = next((v for v in looped_videos if v['id'] == video_id), None)
+        if not video or video['status'] != 'completed':
+            continue
+        
+        # Calculate publish date (increment by 1 day for each video)
+        publish_date = start_date + timedelta(days=idx)
+        
+        queue_entry = {
+            'id': str(uuid.uuid4()),
+            'video_id': video_id,
+            'video_path': os.path.join(LOOPED_FOLDER, video['output_filename']),
+            'title': video_data['title'],
+            'description': video_data['description'],
+            'tags': video_data['tags'].split(',') if isinstance(video_data['tags'], str) else video_data['tags'],
+            'scheduled_publish_time': publish_date.strftime('%Y-%m-%d %H:%M:%S'),
+            'token_file': token_file,
+            'stream_id': stream_id,
+            'thumbnail_id': thumbnail_id,
+            'privacy_status': privacy_status,
+            'status': 'queued',
+            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        queue.append(queue_entry)
+    
+    save_bulk_upload_queue(queue)
+    
+    return jsonify({'success': True, 'message': f'{len(videos)} video ditambahkan ke antrian upload'})
+
+@app.route('/bulk-upload-queue')
+@login_required
+def bulk_upload_queue_page():
+    """View upload queue"""
+    queue = get_bulk_upload_queue()
+    auto_config = get_auto_upload_config()
+    return render_template('bulk_upload_queue.html', queue=queue, auto_config=auto_config)
+
+@app.route('/start-bulk-upload', methods=['POST'])
+@login_required
+@demo_readonly
+def start_bulk_upload():
+    """Start uploading all queued videos to YouTube"""
+    queue = get_bulk_upload_queue()
+    queued_items = [item for item in queue if item['status'] == 'queued']
+    
+    if not queued_items:
+        flash('Tidak ada video dalam antrian', 'warning')
+        return redirect(url_for('bulk_upload_queue_page'))
+    
+    # Start upload process in background
+    def upload_videos_background():
+        from kunci import get_youtube_service
+        from googleapiclient.http import MediaFileUpload
+        
+        for item in queued_items:
+            try:
+                # Check video duration first
+                video_path = item['video_path']
+                
+                if not os.path.exists(video_path):
+                    item['status'] = 'failed'
+                    item['error'] = 'File video tidak ditemukan'
+                    save_bulk_upload_queue(queue)
+                    continue
+                
+                # Get video duration using ffprobe
+                try:
+                    ffprobe_cmd = [
+                        'ffprobe',
+                        '-v', 'error',
+                        '-show_entries', 'format=duration',
+                        '-of', 'default=noprint_wrappers=1:nokey=1',
+                        video_path
+                    ]
+                    result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, timeout=30)
+                    duration_seconds = float(result.stdout.strip())
+                    duration_minutes = duration_seconds / 60
+                    duration_hours = duration_minutes / 60
+                    
+                    logging.info(f"Video duration: {duration_minutes:.2f} minutes ({duration_hours:.2f} hours)")
+                    
+                    # YouTube limits:
+                    # - Unverified accounts: 15 minutes (900 seconds)
+                    # - Verified accounts: 12 hours (43200 seconds)
+                    # - For safety, warn at 11.5 hours
+                    
+                    if duration_seconds > 41400:  # 11.5 hours
+                        item['status'] = 'failed'
+                        item['error'] = f'Video terlalu panjang ({duration_hours:.2f} jam). YouTube maksimal 12 jam untuk akun terverifikasi.'
+                        save_bulk_upload_queue(queue)
+                        logging.error(f"Video too long: {duration_hours:.2f} hours")
+                        continue
+                    
+                    if duration_seconds > 900:  # 15 minutes
+                        logging.warning(f"Video duration {duration_minutes:.2f} minutes - requires verified YouTube account!")
+                        # Continue anyway, let YouTube API handle it
+                    
+                except Exception as e:
+                    logging.warning(f"Could not check video duration: {e}")
+                    # Continue anyway if ffprobe fails
+                
+                # Update status
+                item['status'] = 'uploading'
+                save_bulk_upload_queue(queue)
+                
+                # Get YouTube service
+                youtube = get_youtube_service(item['token_file'])
+                
+                # Prepare video metadata
+                # Parse scheduled time and convert to UTC
+                scheduled_time = datetime.strptime(item['scheduled_publish_time'], '%Y-%m-%d %H:%M:%S')
+                
+                # Use timezone from app config, convert to UTC
+                local_tz = pytz.timezone(TIMEZONE)
+                utc_tz = pytz.UTC
+                
+                # Make scheduled_time timezone aware (local timezone)
+                scheduled_time_local = local_tz.localize(scheduled_time)
+                # Convert to UTC
+                scheduled_time_utc = scheduled_time_local.astimezone(utc_tz)
+                
+                # Get current time in UTC
+                now_utc = datetime.now(utc_tz)
+                
+                # YouTube API Scheduled Publishing Rules:
+                # 1. privacyStatus MUST be "private" for scheduled upload
+                # 2. Set publishAt in ISO 8601 format (UTC)
+                # 3. Video will automatically become PUBLIC at publishAt time
+                # 4. Cannot use "unlisted" for scheduled videos
+                
+                # Ensure scheduled time is at least 1 hour in the future
+                if scheduled_time_utc <= now_utc + timedelta(hours=1):
+                    scheduled_time_utc = now_utc + timedelta(hours=2)
+                    logging.warning(f"Scheduled time adjusted to {scheduled_time_utc} UTC (minimum 1 hour in future)")
+                
+                body = {
+                    'snippet': {
+                        'title': item['title'],
+                        'description': item['description'],
+                        'tags': item['tags'] if isinstance(item['tags'], list) else item['tags'].split(','),
+                        'categoryId': '22'  # People & Blogs
+                    },
+                    'status': {
+                        'privacyStatus': 'private',  # MUST be private for scheduled upload
+                        'publishAt': scheduled_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ'),  # ISO 8601 UTC format
+                        'selfDeclaredMadeForKids': False
+                    }
+                }
+                
+                logging.info(f"Uploading video: {item['title']}")
+                logging.info(f"Privacy: private (will auto-publish to PUBLIC at scheduled time)")
+                logging.info(f"Scheduled publish (UTC): {scheduled_time_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+                logging.info(f"Scheduled publish (Local): {item['scheduled_publish_time']} {TIMEZONE}")
+                
+                # If stream_id provided, bind to live stream
+                if item.get('stream_id'):
+                    body['status']['streamId'] = item['stream_id']
+                
+                # Upload video
+                media = MediaFileUpload(item['video_path'], chunksize=-1, resumable=True)
+                request = youtube.videos().insert(
+                    part='snippet,status',
+                    body=body,
+                    media_body=media
+                )
+                
+                response = None
+                while response is None:
+                    status, response = request.next_chunk()
+                    if status:
+                        item['upload_progress'] = int(status.progress() * 100)
+                        save_bulk_upload_queue(queue)
+                
+                video_id = response['id']
+                item['youtube_video_id'] = video_id
+                
+                # Upload thumbnail if specified
+                if item.get('thumbnail_id'):
+                    thumbnails = get_thumbnail_database()
+                    thumbnail = next((t for t in thumbnails if t['id'] == item['thumbnail_id']), None)
+                    if thumbnail:
+                        thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail['filename'])
+                        if os.path.exists(thumbnail_path):
+                            youtube.thumbnails().set(
+                                videoId=video_id,
+                                media_body=thumbnail_path
+                            ).execute()
+                
+                # Update status to completed
+                item['status'] = 'completed'
+                item['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                item['video_url'] = f'https://studio.youtube.com/video/{video_id}/edit'
+                save_bulk_upload_queue(queue)
+                
+            except Exception as e:
+                error_message = str(e)
+                item['status'] = 'failed'
+                
+                # Better error messages for common YouTube API errors
+                if 'exceeded the number of videos they may upload' in error_message:
+                    item['error'] = '❌ YouTube Daily Quota Exceeded: You have reached the maximum number of uploads per day (default: 6 videos/24h). Wait 24 hours or request quota increase at https://support.google.com/youtube/contact/yt_api_form'
+                elif 'uploadLimitExceeded' in error_message:
+                    item['error'] = '❌ Video too long for unverified account. Verify your YouTube account at https://www.youtube.com/verify or reduce video length to under 15 minutes.'
+                elif 'quotaExceeded' in error_message:
+                    item['error'] = '❌ YouTube API Quota Exceeded: Daily API call limit reached. Wait until quota resets (midnight Pacific Time) or request increase.'
+                elif 'forbidden' in error_message.lower():
+                    item['error'] = '❌ Permission Error: Check your YouTube API credentials and OAuth token. Token may have expired.'
+                elif 'invalidVideoMetadata' in error_message:
+                    item['error'] = '❌ Invalid Metadata: Check title length (<100 chars), description, and tags format.'
+                else:
+                    item['error'] = f'❌ Upload Failed: {error_message}'
+                
+                logging.error(f"Upload failed for {item['title']}: {error_message}")
+                save_bulk_upload_queue(queue)
+    
+    # Start background thread
+    thread = threading.Thread(target=upload_videos_background)
+    thread.daemon = True
+    thread.start()
+    
+    flash(f'Memulai upload {len(queued_items)} video ke YouTube...', 'success')
+    return redirect(url_for('bulk_upload_queue_page'))
+
+@app.route('/api/upload-queue-status')
+@login_required
+def api_upload_queue_status():
+    """Get upload queue status"""
+    queue = get_bulk_upload_queue()
+    return jsonify(queue)
+
+@app.route('/delete-queue-item/<item_id>', methods=['POST'])
+@login_required
+@demo_readonly
+def delete_queue_item(item_id):
+    """Delete item from upload queue"""
+    queue = get_bulk_upload_queue()
+    queue = [item for item in queue if item['id'] != item_id]
+    save_bulk_upload_queue(queue)
+    
+    flash('Item berhasil dihapus dari antrian', 'success')
+    return redirect(url_for('bulk_upload_queue_page'))
+
+@app.route('/clear-completed-queue', methods=['POST'])
+@login_required
+@demo_readonly
+def clear_completed_queue():
+    """Clear all completed items from queue"""
+    queue = get_bulk_upload_queue()
+    queue = [item for item in queue if item['status'] != 'completed']
+    save_bulk_upload_queue(queue)
+    
+    flash('Item yang sudah selesai berhasil dihapus', 'success')
+    return redirect(url_for('bulk_upload_queue_page'))
+
+@app.route('/requeue-items', methods=['POST'])
+@login_required
+@demo_readonly
+def requeue_items():
+    """Re-queue selected items (duplicate them with queued status)"""
+    data = request.get_json()
+    item_ids = data.get('item_ids', [])
+    
+    if not item_ids:
+        return jsonify({'success': False, 'error': 'No items selected'}), 400
+    
+    try:
+        queue = get_bulk_upload_queue()
+        requeued_count = 0
+        
+        for item_id in item_ids:
+            # Find the item
+            original_item = next((item for item in queue if item['id'] == item_id), None)
+            if not original_item:
+                continue
+            
+            # Only allow requeue for completed/failed items
+            if original_item['status'] not in ['completed', 'failed']:
+                continue
+            
+            # Create a duplicate with new ID and queued status
+            new_item = {
+                'id': str(uuid.uuid4()),
+                'video_id': original_item['video_id'],
+                'video_path': original_item['video_path'],
+                'title': original_item['title'],
+                'description': original_item['description'],
+                'tags': original_item['tags'],
+                'scheduled_publish_time': original_item['scheduled_publish_time'],
+                'token_file': original_item['token_file'],
+                'stream_id': original_item.get('stream_id'),
+                'thumbnail_id': original_item.get('thumbnail_id'),
+                'privacy_status': original_item.get('privacy_status', 'unlisted'),
+                'status': 'queued',
+                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            queue.append(new_item)
+            requeued_count += 1
+        
+        save_bulk_upload_queue(queue)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'{requeued_count} item(s) added back to queue'
+        })
+        
+    except Exception as e:
+        logging.error(f"Error requeueing items: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/toggle-auto-upload', methods=['POST'])
+@login_required
+@demo_readonly
+def toggle_auto_upload():
+    """Toggle auto upload scheduler"""
+    data = request.get_json()
+    
+    config = get_auto_upload_config()
+    config['enabled'] = data.get('enabled', False)
+    
+    if 'upload_offset_hours' in data:
+        config['upload_offset_hours'] = int(data['upload_offset_hours'])
+    if 'check_interval_minutes' in data:
+        config['check_interval_minutes'] = int(data['check_interval_minutes'])
+    
+    save_auto_upload_config(config)
+    
+    status = 'enabled' if config['enabled'] else 'disabled'
+    return jsonify({
+        'success': True, 
+        'message': f'Auto upload scheduler {status}',
+        'config': config
+    })
+
+# Auto Upload Scheduler Background Thread
+def auto_upload_scheduler():
+    """Background thread that automatically uploads videos based on schedule"""
+    while True:
+        try:
+            config = get_auto_upload_config()
+            
+            if not config.get('enabled', False):
+                # Sleep and check again later
+                time.sleep(60)  # Check every minute if scheduler is disabled
+                continue
+            
+            queue = get_bulk_upload_queue()
+            queued_items = [item for item in queue if item['status'] == 'queued']
+            
+            if not queued_items:
+                time.sleep(config.get('check_interval_minutes', 5) * 60)
+                continue
+            
+            # Check which videos should be uploaded now
+            now = datetime.now(pytz.timezone(TIMEZONE))
+            upload_offset = timedelta(hours=config.get('upload_offset_hours', 2))
+            
+            for item in queued_items:
+                try:
+                    # Parse scheduled publish time
+                    scheduled_time = datetime.strptime(item['scheduled_publish_time'], '%Y-%m-%d %H:%M:%S')
+                    scheduled_time = pytz.timezone(TIMEZONE).localize(scheduled_time)
+                    
+                    # Calculate when to upload (X hours before publish time)
+                    upload_time = scheduled_time - upload_offset
+                    
+                    # If upload time has arrived, upload now
+                    if now >= upload_time and item['status'] == 'queued':
+                        logging.info(f"[AUTO-UPLOAD] Starting auto upload for: {item['title']}")
+                        logging.info(f"[AUTO-UPLOAD] Scheduled publish: {item['scheduled_publish_time']}")
+                        
+                        # Upload the video (reuse existing upload logic)
+                        from kunci import get_youtube_service
+                        from googleapiclient.http import MediaFileUpload
+                        
+                        # Mark as uploading
+                        item['status'] = 'uploading'
+                        save_bulk_upload_queue(queue)
+                        
+                        # Get YouTube service
+                        youtube = get_youtube_service(item['token_file'])
+                        
+                        # Prepare metadata (same as manual upload)
+                        scheduled_time_dt = datetime.strptime(item['scheduled_publish_time'], '%Y-%m-%d %H:%M:%S')
+                        local_tz = pytz.timezone(TIMEZONE)
+                        utc_tz = pytz.UTC
+                        scheduled_time_local = local_tz.localize(scheduled_time_dt)
+                        scheduled_time_utc = scheduled_time_local.astimezone(utc_tz)
+                        
+                        # Ensure at least 1 hour in future
+                        now_utc = datetime.now(utc_tz)
+                        if scheduled_time_utc <= now_utc + timedelta(hours=1):
+                            scheduled_time_utc = now_utc + timedelta(hours=2)
+                        
+                        body = {
+                            'snippet': {
+                                'title': item['title'],
+                                'description': item['description'],
+                                'tags': item['tags'] if isinstance(item['tags'], list) else item['tags'].split(','),
+                                'categoryId': '22'
+                            },
+                            'status': {
+                                'privacyStatus': 'private',
+                                'publishAt': scheduled_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                                'selfDeclaredMadeForKids': False
+                            }
+                        }
+                        
+                        if item.get('stream_id'):
+                            body['status']['streamId'] = item['stream_id']
+                        
+                        # Upload video
+                        media = MediaFileUpload(item['video_path'], chunksize=-1, resumable=True)
+                        request = youtube.videos().insert(
+                            part='snippet,status',
+                            body=body,
+                            media_body=media
+                        )
+                        
+                        response = None
+                        while response is None:
+                            status, response = request.next_chunk()
+                            if status:
+                                item['upload_progress'] = int(status.progress() * 100)
+                                save_bulk_upload_queue(queue)
+                        
+                        video_id = response['id']
+                        item['youtube_video_id'] = video_id
+                        
+                        # Upload thumbnail if specified
+                        if item.get('thumbnail_id'):
+                            thumbnails = get_thumbnail_database()
+                            thumbnail = next((t for t in thumbnails if t['id'] == item['thumbnail_id']), None)
+                            if thumbnail:
+                                thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail['filename'])
+                                if os.path.exists(thumbnail_path):
+                                    youtube.thumbnails().set(
+                                        videoId=video_id,
+                                        media_body=thumbnail_path
+                                    ).execute()
+                        
+                        # Mark as completed
+                        item['status'] = 'completed'
+                        item['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        item['video_url'] = f'https://studio.youtube.com/video/{video_id}/edit'
+                        save_bulk_upload_queue(queue)
+                        
+                        logging.info(f"[AUTO-UPLOAD] ✓ Successfully uploaded: {item['title']}")
+                        logging.info(f"[AUTO-UPLOAD] YouTube Video ID: {video_id}")
+                        
+                except Exception as e:
+                    logging.error(f"[AUTO-UPLOAD] Error uploading {item.get('title', 'Unknown')}: {e}")
+                    item['status'] = 'failed'
+                    item['error'] = str(e)
+                    save_bulk_upload_queue(queue)
+            
+            # Sleep before next check
+            sleep_seconds = config.get('check_interval_minutes', 5) * 60
+            logging.info(f"[AUTO-UPLOAD] Sleeping for {config.get('check_interval_minutes', 5)} minutes...")
+            time.sleep(sleep_seconds)
+            
+        except Exception as e:
+            logging.error(f"[AUTO-UPLOAD] Scheduler error: {e}")
+            time.sleep(60)  # Sleep 1 minute on error
+
 if __name__ == '__main__':
     # Disable debug mode for production
     app.debug = False
@@ -2337,7 +3426,12 @@ if __name__ == '__main__':
     
     # Initialize scheduler
     start_scheduler_thread()
+    
+    # Start auto upload scheduler thread
+    auto_scheduler_thread = threading.Thread(target=auto_upload_scheduler, daemon=True)
+    auto_scheduler_thread.start()
+    logging.info("[AUTO-UPLOAD] Auto upload scheduler thread started")
 
     # Start Flask in production mode
-    app.run(debug=False, use_reloader=False, host='0.0.0.0')
+    app.run(debug=False, use_reloader=False, host='0.0.0.0', port=5001)
 

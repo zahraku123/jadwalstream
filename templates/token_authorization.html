@@ -16,12 +16,20 @@
                     <i class="fas fa-clipboard-list mr-2"></i> Langkah-langkah:
                 </h5>
                 <ol class="list-decimal list-inside space-y-2 text-blue-700 dark:text-blue-300">
-                    <li>Klik tombol di bawah untuk membuka URL Google OAuth</li>
+                    <li>Klik tombol "Buka URL" di bawah untuk membuka Google OAuth</li>
                     <li>Login dengan akun Google Anda</li>
                     <li>Izinkan akses ke YouTube</li>
-                    <li>Copy <strong>kode authorization</strong> yang muncul</li>
-                    <li>Paste kode tersebut di form di bawah</li>
+                    <li>Setelah authorize, browser akan redirect ke halaman error</li>
+                    <li><strong>Copy FULL URL dari address bar</strong> (yang berisi <code>?code=...</code>)</li>
+                    <li>Paste URL tersebut ke form di bawah</li>
                 </ol>
+                <div class="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded">
+                    <p class="text-sm text-green-800 dark:text-green-200">
+                        <i class="fas fa-lightbulb mr-1"></i> <strong>Tips:</strong> Anda bisa paste <strong>full URL</strong> yang error 
+                        (contoh: <code class="text-xs">http://localhost:5001/?code=4/0AVG...</code>) atau hanya <strong>kode</strong> saja (contoh: <code class="text-xs">4/0AVG...</code>). 
+                        Sistem akan otomatis extract kode authorization!
+                    </p>
+                </div>
             </div>
 
             <div class="mb-6">
@@ -46,10 +54,22 @@
                 <input type="hidden" name="token_name" value="{{ token_name }}">
                 
                 <div class="mb-6">
-                    <label for="auth_code" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Kode Authorization:</label>
-                    <textarea class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100" id="auth_code" name="auth_code" rows="3" 
-                              placeholder="Paste kode authorization dari Google di sini..." required></textarea>
-                    <small class="text-sm text-gray-500 dark:text-gray-400 mt-1 block">Paste kode yang Anda dapatkan setelah authorize di Google</small>
+                    <label for="auth_code" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fas fa-key mr-1 text-blue-500"></i> Kode Authorization atau Full URL:
+                    </label>
+                    <textarea class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 font-mono text-sm" 
+                              id="auth_code" 
+                              name="auth_code" 
+                              rows="4" 
+                              placeholder="Paste salah satu dari:&#10;1. Full URL: http://localhost:5001/?code=4/0AVG7fiRxxxxxx&scope=...&#10;2. Atau hanya kode: 4/0AVG7fiRxxxxxx" 
+                              required></textarea>
+                    <div class="mt-2 flex items-start gap-2 text-sm">
+                        <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+                        <div class="text-gray-600 dark:text-gray-400">
+                            <strong>Mudah!</strong> Setelah authorize di Google, browser akan menampilkan halaman error. 
+                            Copy <strong>seluruh URL dari address bar</strong> dan paste di sini. Sistem akan otomatis extract kode!
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex justify-between">

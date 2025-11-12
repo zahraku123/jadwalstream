@@ -99,6 +99,28 @@
                             </a>
                             
                             <div class="pt-4 mt-4 border-t border-dark-border">
+                                <p class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Bulk Tools</p>
+                            </div>
+                            
+                            <a href="{{ url_for('video_looping') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-repeat mr-3 text-pink-400 group-hover:text-pink-300"></i>
+                                <span>Video Looping</span>
+                            </a>
+                            
+                            <a href="{{ url_for('bulk_scheduling') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-robot mr-3 text-orange-400 group-hover:text-orange-300"></i>
+                                <span>AI Bulk Schedule</span>
+                            </a>
+                            
+                            <a href="{{ url_for('bulk_upload_queue_page') }}" class="sidebar-item group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white transition-all duration-200">
+                                <div class="neon-line"></div>
+                                <i class="fas fa-cloud-upload-alt mr-3 text-blue-400 group-hover:text-blue-300"></i>
+                                <span>Upload Queue</span>
+                            </a>
+                            
+                            <div class="pt-4 mt-4 border-t border-dark-border">
                                 <p class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Settings</p>
                             </div>
                             
@@ -121,6 +143,11 @@
                             <a href="{{ url_for('telegram_settings') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
                                 <i class="fab fa-telegram mr-3 text-blue-400 group-hover:text-blue-300"></i>
                                 Telegram Notifications
+                            </a>
+                            
+                            <a href="{{ url_for('gemini_settings') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fas fa-brain mr-3 text-purple-400 group-hover:text-purple-300"></i>
+                                Gemini AI Settings
                             </a>
                             {% endif %}
                             

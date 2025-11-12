@@ -33,37 +33,89 @@
     <!-- Upload Forms -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <!-- Upload from PC -->
-        <div x-show="showLocalUpload" x-collapse class="cyber-card">
+        <div x-show="showLocalUpload" x-transition class="cyber-card">
             <div class="cyber-card-header bg-gradient-to-r from-purple-600 to-purple-800">
                 <h5 class="text-lg font-semibold font-mono flex items-center">
                     <i class="fas fa-upload mr-2"></i> UPLOAD FROM LOCAL PC
                 </h5>
             </div>
             <div class="cyber-card-body">
-            <form action="{{ url_for('upload_video') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+            <form action="{{ url_for('upload_video') }}" method="post" enctype="multipart/form-data" class="space-y-4" id="multiUploadForm">
                 <div>
                     <label class="cyber-label">
-                        <i class="fas fa-file-video mr-2"></i>Select Video File
+                        <i class="fas fa-file-video mr-2"></i>Select Video Files (Multiple)
                     </label>
-                    <input type="file" name="video_file" accept="video/*" required
-                           class="cyber-input">
+                    <input type="file" 
+                           name="video_files" 
+                           accept="video/*" 
+                           multiple 
+                           required
+                           id="videoFilesInput"
+                           class="cyber-input"
+                           onchange="updateFileList()">
+                    <p class="text-xs text-slate-400 mt-1">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        You can select multiple video files at once (Ctrl/Cmd + Click)
+                    </p>
+                    <p class="text-xs text-yellow-400 mt-1">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        Max total size: 2GB per upload batch. For larger files, upload in smaller batches.
+                    </p>
                 </div>
-                <div>
+                
+                <!-- File List Preview -->
+                <div id="fileListPreview" class="hidden">
                     <label class="cyber-label">
-                        <i class="fas fa-heading mr-2"></i>Video Title
+                        <i class="fas fa-list mr-2"></i>Selected Files (<span id="fileCount">0</span>)
                     </label>
-                    <input type="text" name="video_title" required
-                           class="cyber-input" placeholder="Enter video title...">
+                    <div id="fileList" class="space-y-2 max-h-48 overflow-y-auto bg-dark-card/50 rounded-lg p-3 border border-dark-border">
+                        <!-- Files will be listed here -->
+                    </div>
                 </div>
-                <button type="submit" class="cyber-btn primary w-full">
-                    <i class="fas fa-cloud-upload-alt mr-2"></i> UPLOAD VIDEO
+                
+                <button type="submit" class="cyber-btn primary w-full" id="uploadBtn">
+                    <i class="fas fa-cloud-upload-alt mr-2"></i>
+                    <span id="uploadBtnText">UPLOAD VIDEOS</span>
                 </button>
+                
+                <!-- Upload Progress -->
+                <div id="uploadProgress" class="hidden">
+                    <div class="bg-dark-card/50 rounded-lg p-4 border border-green-500/30">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-green-400">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>
+                                Uploading...
+                            </span>
+                            <span class="text-sm text-slate-400" id="uploadStatus">0 / 0</span>
+                        </div>
+                        <div class="w-full bg-dark-card rounded-full h-3 mb-2">
+                            <div id="progressBar" class="bg-gradient-to-r from-green-500 to-cyan-500 h-3 rounded-full transition-all duration-300 flex items-center justify-center" style="width: 0%">
+                                <span class="text-xs text-white font-bold" id="progressPercent"></span>
+                            </div>
+                        </div>
+                        <!-- Upload Stats -->
+                        <div class="flex items-center justify-between text-xs text-slate-400">
+                            <span>
+                                <i class="fas fa-upload mr-1"></i>
+                                <span id="uploadedSize">0 MB</span> / <span id="totalSize">0 MB</span>
+                            </span>
+                            <span>
+                                <i class="fas fa-tachometer-alt mr-1"></i>
+                                <span id="uploadSpeed">0 MB/s</span>
+                            </span>
+                            <span>
+                                <i class="fas fa-clock mr-1"></i>
+                                <span id="uploadTime">--:--</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </form>
             </div>
         </div>
         
         <!-- Import from Drive -->
-        <div x-show="showDriveUpload" x-collapse class="cyber-card">
+        <div x-show="showDriveUpload" x-transition class="cyber-card">
             <div class="cyber-card-header bg-gradient-to-r from-green-600 to-green-800">
                 <h5 class="text-lg font-semibold font-mono flex items-center">
                     <i class="fab fa-google-drive mr-2"></i> IMPORT FROM GOOGLE DRIVE
@@ -154,4 +206,211 @@
     {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateFileList() {
+    const input = document.getElementById('videoFilesInput');
+    const fileListDiv = document.getElementById('fileList');
+    const fileListPreview = document.getElementById('fileListPreview');
+    const fileCount = document.getElementById('fileCount');
+    const uploadBtnText = document.getElementById('uploadBtnText');
+    
+    const files = input.files;
+    
+    if (files.length === 0) {
+        fileListPreview.classList.add('hidden');
+        uploadBtnText.textContent = 'UPLOAD VIDEOS';
+        return;
+    }
+    
+    // Show file list
+    fileListPreview.classList.remove('hidden');
+    fileCount.textContent = files.length;
+    uploadBtnText.textContent = `UPLOAD ${files.length} VIDEO${files.length > 1 ? 'S' : ''}`;
+    
+    // Clear and populate file list
+    fileListDiv.innerHTML = '';
+    
+    Array.from(files).forEach((file, index) => {
+        const fileSize = (file.size / (1024 * 1024)).toFixed(2); // MB
+        const fileItem = document.createElement('div');
+        fileItem.className = 'flex items-center justify-between p-2 bg-dark-card rounded border border-dark-border hover:border-purple-500/50 transition-all';
+        fileItem.innerHTML = `
+            <div class="flex items-center space-x-3 flex-1 min-w-0">
+                <span class="text-purple-400">
+                    <i class="fas fa-file-video"></i>
+                </span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm text-slate-200 truncate font-mono">${file.name}</p>
+                    <p class="text-xs text-slate-400">${fileSize} MB</p>
+                </div>
+            </div>
+            <span class="text-xs text-green-400 ml-2">
+                <i class="fas fa-check-circle"></i>
+            </span>
+        `;
+        fileListDiv.appendChild(fileItem);
+    });
+}
+
+// Handle form submission with progress
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('multiUploadForm');
+    if (!form) return;
+    
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const progressBar = document.getElementById('progressBar');
+        const files = document.getElementById('videoFilesInput').files;
+        
+        // Validate files
+        if (files.length === 0) {
+            alert('Please select at least one video file');
+            return;
+        }
+        
+        // Check total file size (max 2GB)
+        let totalSize = 0;
+        for (let i = 0; i < files.length; i++) {
+            totalSize += files[i].size;
+        }
+        
+        const maxSize = 2048 * 1024 * 1024; // 2GB in bytes
+        if (totalSize > maxSize) {
+            const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+            const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0);
+            alert(`Total file size (${totalSizeMB} MB) exceeds maximum allowed (${maxSizeMB} MB).\n\nPlease select fewer files or upload in batches.`);
+            return;
+        }
+        
+        // Disable button and show progress
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> UPLOADING...';
+        uploadProgress.classList.remove('hidden');
+        uploadStatus.textContent = `0 / ${files.length}`;
+        
+        // Get progress elements
+        const uploadedSizeEl = document.getElementById('uploadedSize');
+        const totalSizeEl = document.getElementById('totalSize');
+        const uploadSpeedEl = document.getElementById('uploadSpeed');
+        const uploadTimeEl = document.getElementById('uploadTime');
+        const progressPercent = document.getElementById('progressPercent');
+        
+        // Calculate total size
+        let totalBytes = 0;
+        for (let i = 0; i < files.length; i++) {
+            totalBytes += files[i].size;
+        }
+        const totalMB = (totalBytes / (1024 * 1024)).toFixed(2);
+        totalSizeEl.textContent = totalMB + ' MB';
+        
+        // Upload with XMLHttpRequest for progress tracking
+        const xhr = new XMLHttpRequest();
+        const startTime = Date.now();
+        
+        // Progress tracking
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                const uploadedMB = (e.loaded / (1024 * 1024)).toFixed(2);
+                
+                // Update progress bar
+                progressBar.style.width = percentComplete + '%';
+                progressPercent.textContent = percentComplete + '%';
+                
+                // Update uploaded size
+                uploadedSizeEl.textContent = uploadedMB + ' MB';
+                
+                // Calculate speed
+                const elapsedTime = (Date.now() - startTime) / 1000; // seconds
+                const speedMBps = (e.loaded / (1024 * 1024)) / elapsedTime;
+                uploadSpeedEl.textContent = speedMBps.toFixed(2) + ' MB/s';
+                
+                // Calculate remaining time
+                if (speedMBps > 0) {
+                    const remainingBytes = e.total - e.loaded;
+                    const remainingSeconds = remainingBytes / (speedMBps * 1024 * 1024);
+                    const mins = Math.floor(remainingSeconds / 60);
+                    const secs = Math.floor(remainingSeconds % 60);
+                    uploadTimeEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                }
+            }
+        });
+        
+        // Upload complete
+        xhr.addEventListener('load', () => {
+            try {
+                if (xhr.status !== 200) {
+                    throw new Error(`HTTP error! status: ${xhr.status}`);
+                }
+                
+                const contentType = xhr.getResponseHeader('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = xhr.responseText;
+                    console.error('Non-JSON response:', text.substring(0, 200));
+                    
+                    if (text.includes('login') || text.includes('Login')) {
+                        throw new Error('Session expired. Please refresh page and login again.');
+                    }
+                    
+                    throw new Error('Server returned invalid response. Please try again.');
+                }
+                
+                const result = JSON.parse(xhr.responseText);
+                
+                if (result.success) {
+                    // Show success
+                    uploadStatus.textContent = `${result.uploaded} / ${files.length} completed`;
+                    progressBar.style.width = '100%';
+                    progressPercent.textContent = '100%';
+                    uploadSpeedEl.textContent = 'Complete!';
+                    
+                    alert(result.message || 'Upload successful!');
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } else {
+                    throw new Error(result.message || 'Upload failed');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Upload error: ' + error.message);
+                
+                // Re-enable button
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = '<i class="fas fa-cloud-upload-alt mr-2"></i><span id="uploadBtnText">UPLOAD VIDEOS</span>';
+                uploadProgress.classList.add('hidden');
+            }
+        });
+        
+        // Upload error
+        xhr.addEventListener('error', () => {
+            alert('Network error occurred. Please check your connection and try again.');
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fas fa-cloud-upload-alt mr-2"></i><span id="uploadBtnText">UPLOAD VIDEOS</span>';
+            uploadProgress.classList.add('hidden');
+        });
+        
+        // Upload abort
+        xhr.addEventListener('abort', () => {
+            alert('Upload cancelled.');
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fas fa-cloud-upload-alt mr-2"></i><span id="uploadBtnText">UPLOAD VIDEOS</span>';
+            uploadProgress.classList.add('hidden');
+        });
+        
+        // Send request
+        xhr.open('POST', this.action);
+        xhr.send(formData);
+    });
+});
+</script>
 {% endblock %}

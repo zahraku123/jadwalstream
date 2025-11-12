@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Gemini AI Settings - YouTube Scheduler{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-white mb-2">
+            <i class="fas fa-brain text-purple-400 mr-2"></i>
+            Gemini AI Settings
+        </h1>
+        <p class="text-slate-400">Configure Google Gemini API for AI-powered metadata generation</p>
+    </div>
+
+    <!-- API Key Configuration -->
+    <div class="glass-panel rounded-xl p-6 border border-purple-500/20">
+        <form method="POST" action="{{ url_for('gemini_settings') }}">
+            <div class="mb-6">
+                <label for="api_key" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-key mr-2 text-purple-400"></i>
+                    Gemini API Key
+                </label>
+                <input type="text" 
+                       name="api_key" 
+                       id="api_key" 
+                       value="{{ config.get('api_key', '') }}"
+                       class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                       placeholder="Enter your Google Gemini API key">
+                <p class="mt-2 text-sm text-slate-400">
+                    Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" class="text-purple-400 hover:text-purple-300 underline">Google AI Studio</a>
+                </p>
+            </div>
+
+            <div class="mb-6">
+                <label for="model" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-robot mr-2 text-cyan-400"></i>
+                    Model
+                </label>
+                <select name="model" 
+                        id="model"
+                        class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                    <optgroup label="⭐ Gemini 2.5 (Latest & Best)">
+                        <option value="gemini-2.5-flash" {% if config.get('model', 'gemini-2.5-flash') == 'gemini-2.5-flash' %}selected{% endif %}>🚀 Gemini 2.5 Flash (Recommended - Fast & Smart)</option>
+                        <option value="gemini-2.5-pro" {% if config.get('model') == 'gemini-2.5-pro' %}selected{% endif %}>🧠 Gemini 2.5 Pro (Most Advanced)</option>
+                        <option value="gemini-2.5-flash-lite" {% if config.get('model') == 'gemini-2.5-flash-lite' %}selected{% endif %}>💨 Gemini 2.5 Flash Lite (Ultra Fast)</option>
+                    </optgroup>
+                    <optgroup label="Gemini 2.0 (Stable)">
+                        <option value="gemini-2.0-flash" {% if config.get('model') == 'gemini-2.0-flash' %}selected{% endif %}>⚡ Gemini 2.0 Flash (Stable & Fast)</option>
+                        <option value="gemini-2.0-flash-exp" {% if config.get('model') == 'gemini-2.0-flash-exp' %}selected{% endif %}>🔬 Gemini 2.0 Flash Exp (Free)</option>
+                        <option value="gemini-2.0-flash-lite" {% if config.get('model') == 'gemini-2.0-flash-lite' %}selected{% endif %}>💡 Gemini 2.0 Flash Lite</option>
+                    </optgroup>
+                    <optgroup label="Gemini 1.5 (Legacy)">
+                        <option value="gemini-1.5-flash" {% if config.get('model') == 'gemini-1.5-flash' %}selected{% endif %}>Gemini 1.5 Flash</option>
+                        <option value="gemini-1.5-flash-8b" {% if config.get('model') == 'gemini-1.5-flash-8b' %}selected{% endif %}>Gemini 1.5 Flash-8B</option>
+                        <option value="gemini-1.5-pro" {% if config.get('model') == 'gemini-1.5-pro' %}selected{% endif %}>Gemini 1.5 Pro</option>
+                    </optgroup>
+                    <optgroup label="Specialized (Advanced)">
+                        <option value="learnlm-2.0-flash-experimental" {% if config.get('model') == 'learnlm-2.0-flash-experimental' %}selected{% endif %}>📚 LearnLM 2.0 Flash (Educational)</option>
+                        <option value="gemini-2.0-flash-preview-image-generation" {% if config.get('model') == 'gemini-2.0-flash-preview-image-generation' %}selected{% endif %}>🎨 Gemini 2.0 Image Gen</option>
+                    </optgroup>
+                </select>
+                <p class="mt-2 text-sm text-slate-400">
+                    Choose the AI model for metadata generation
+                </p>
+                
+                <!-- Model Info -->
+                <div class="mt-3 p-3 bg-dark-card/50 rounded-lg border border-dark-border">
+                    <div class="text-xs text-slate-400 space-y-1">
+                        <div><strong class="text-cyan-400">🚀 2.5 Flash:</strong> Tercepat, terpintar, terbaru (RECOMMENDED)</div>
+                        <div><strong class="text-purple-400">🧠 2.5 Pro:</strong> Paling advanced, best quality</div>
+                        <div><strong class="text-yellow-400">💨 2.5 Flash Lite:</strong> Ultra fast untuk bulk</div>
+                        <div><strong class="text-green-400">⚡ 2.0 Flash:</strong> Stable & reliable</div>
+                        <div><strong class="text-blue-400">🔬 2.0 Flash Exp:</strong> Gratis untuk testing</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label for="custom_prompt" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-comment-dots mr-2 text-yellow-400"></i>
+                    Custom Prompt (Optional)
+                </label>
+                <textarea name="custom_prompt" 
+                          id="custom_prompt"
+                          rows="8"
+                          placeholder="Example: Generate YouTube metadata for '{keyword}' video #{index}. Original: {original_title}. Create catchy title, detailed description, and 10+ tags. Format as JSON with title, description, tags."
+                          class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono text-sm">{{ config.get('custom_prompt', '') }}</textarea>
+                <p class="mt-2 text-sm text-slate-400">
+                    Customize the AI prompt. Available placeholders: <code class="text-cyan-400">{keyword}</code>, <code class="text-cyan-400">{index}</code>, <code class="text-cyan-400">{original_title}</code>
+                </p>
+                <div class="mt-2 text-xs text-slate-500">
+                    Leave empty to use default prompt. Custom prompt helps generate more targeted metadata.
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <div class="text-sm">
+                    {% if config.get('api_key') %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                        <i class="fas fa-check-circle mr-1"></i>
+                        API Key Configured
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                        <i class="fas fa-exclamation-circle mr-1"></i>
+                        Not Configured
+                    </span>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all">
+                    <i class="fas fa-save mr-2"></i>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Metadata Excel Upload Card -->
+    <div class="mt-6 glass-panel rounded-xl p-6 border border-orange-500/20">
+        <h3 class="text-lg font-semibold text-white mb-3">
+            <i class="fas fa-file-excel text-orange-400 mr-2"></i>
+            Random Metadata Templates (Excel)
+        </h3>
+        <p class="text-sm text-slate-400 mb-4">
+            Upload Excel file with metadata templates for random selection. Alternative to AI generation.
+        </p>
+
+        <form action="{{ url_for('upload_metadata_excel') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-upload mr-2 text-cyan-400"></i>
+                    Upload Excel File (.xlsx)
+                </label>
+                <input type="file" 
+                       name="excel_file" 
+                       accept=".xlsx,.xls"
+                       required
+                       class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 transition-all">
+                <p class="mt-2 text-xs text-slate-500">
+                    Excel format: <strong>Column A</strong> = Title, <strong>Column B</strong> = Description, <strong>Column C</strong> = Tags
+                </p>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <div class="text-sm">
+                    {% set metadata_count = config.get('metadata_count', 0) %}
+                    {% if metadata_count > 0 %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                        <i class="fas fa-check-circle mr-1"></i>
+                        {{ metadata_count }} templates loaded
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                        <i class="fas fa-exclamation-circle mr-1"></i>
+                        No templates uploaded
+                    </span>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all">
+                    <i class="fas fa-upload mr-2"></i>
+                    Upload Excel
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <p class="text-sm text-blue-400">
+                <i class="fas fa-info-circle mr-2"></i>
+                <strong>Example Excel Structure:</strong>
+            </p>
+            <div class="mt-2 text-xs text-slate-300 font-mono bg-dark-card/50 p-3 rounded">
+                <div class="grid grid-cols-3 gap-2 font-bold border-b border-slate-700 pb-2 mb-2">
+                    <div>A (Title)</div>
+                    <div>B (Description)</div>
+                    <div>C (Tags)</div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-slate-400">
+                    <div>Amazing Video 1</div>
+                    <div>This is a great video...</div>
+                    <div>gaming, fun, cool</div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-slate-400 mt-1">
+                    <div>Awesome Content 2</div>
+                    <div>Check out this...</div>
+                    <div>tutorial, howto</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Card -->
+    <div class="mt-6 glass-panel rounded-xl p-6 border border-blue-500/20">
+        <h3 class="text-lg font-semibold text-white mb-3">
+            <i class="fas fa-info-circle text-blue-400 mr-2"></i>
+            How to Get Gemini API Key
+        </h3>
+        <ol class="list-decimal list-inside space-y-2 text-slate-300">
+            <li>Visit <a href="https://makersuite.google.com/app/apikey" target="_blank" class="text-blue-400 hover:text-blue-300 underline">Google AI Studio</a></li>
+            <li>Sign in with your Google account</li>
+            <li>Click "Create API Key" button</li>
+            <li>Copy the generated API key</li>
+            <li>Paste it in the form above and save</li>
+        </ol>
+
+        <div class="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <p class="text-sm text-yellow-400">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <strong>Note:</strong> Keep your API key secure. Never share it publicly.
+            </p>
+        </div>
+    </div>
+
+    <!-- Features Card -->
+    <div class="mt-6 glass-panel rounded-xl p-6 border border-cyan-500/20">
+        <h3 class="text-lg font-semibold text-white mb-3">
+            <i class="fas fa-magic text-cyan-400 mr-2"></i>
+            AI Features
+        </h3>
+        <ul class="space-y-2 text-slate-300">
+            <li class="flex items-start">
+                <i class="fas fa-check text-green-400 mr-2 mt-1"></i>
+                <span>Generate YouTube video titles automatically</span>
+            </li>
+            <li class="flex items-start">
+                <i class="fas fa-check text-green-400 mr-2 mt-1"></i>
+                <span>Create engaging video descriptions</span>
+            </li>
+            <li class="flex items-start">
+                <i class="fas fa-check text-green-400 mr-2 mt-1"></i>
+                <span>Generate relevant tags for better discoverability</span>
+            </li>
+            <li class="flex items-start">
+                <i class="fas fa-check text-green-400 mr-2 mt-1"></i>
+                <span>Bulk process multiple videos at once</span>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Model Comparison Card -->
+    <div class="mt-6 glass-panel rounded-xl p-6 border border-purple-500/20">
+        <h3 class="text-lg font-semibold text-white mb-3">
+            <i class="fas fa-chart-bar text-purple-400 mr-2"></i>
+            Model Comparison
+        </h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-slate-300">
+                <thead>
+                    <tr class="border-b border-dark-border">
+                        <th class="text-left py-2">Model</th>
+                        <th class="text-center py-2">Speed</th>
+                        <th class="text-center py-2">Quality</th>
+                        <th class="text-center py-2">Cost</th>
+                        <th class="text-center py-2">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b border-dark-border/50">
+                        <td class="py-2">🚀 Gemini 2.5 Flash</td>
+                        <td class="text-center">⚡⚡⚡⚡⚡</td>
+                        <td class="text-center">⭐⭐⭐⭐⭐</td>
+                        <td class="text-center text-green-400">$</td>
+                        <td class="text-center"><span class="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded">Latest</span></td>
+                    </tr>
+                    <tr class="border-b border-dark-border/50">
+                        <td class="py-2">🧠 Gemini 2.5 Pro</td>
+                        <td class="text-center">⚡⚡⚡⚡</td>
+                        <td class="text-center">⭐⭐⭐⭐⭐</td>
+                        <td class="text-center text-yellow-400">$$$</td>
+                        <td class="text-center"><span class="text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded">Best</span></td>
+                    </tr>
+                    <tr class="border-b border-dark-border/50">
+                        <td class="py-2">💨 Gemini 2.5 Flash Lite</td>
+                        <td class="text-center">⚡⚡⚡⚡⚡</td>
+                        <td class="text-center">⭐⭐⭐⭐</td>
+                        <td class="text-center text-green-400">¢</td>
+                        <td class="text-center"><span class="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded">Latest</span></td>
+                    </tr>
+                    <tr class="border-b border-dark-border/50">
+                        <td class="py-2">⚡ Gemini 2.0 Flash</td>
+                        <td class="text-center">⚡⚡⚡⚡</td>
+                        <td class="text-center">⭐⭐⭐⭐</td>
+                        <td class="text-center text-green-400">$</td>
+                        <td class="text-center"><span class="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">Stable</span></td>
+                    </tr>
+                    <tr class="border-b border-dark-border/50">
+                        <td class="py-2">🔬 Gemini 2.0 Flash Exp</td>
+                        <td class="text-center">⚡⚡⚡⚡⚡</td>
+                        <td class="text-center">⭐⭐⭐⭐</td>
+                        <td class="text-center text-green-400">FREE</td>
+                        <td class="text-center"><span class="text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded">Exp</span></td>
+                    </tr>
+                    <tr>
+                        <td class="py-2">📚 LearnLM 2.0</td>
+                        <td class="text-center">⚡⚡⚡⚡</td>
+                        <td class="text-center">⭐⭐⭐⭐⭐</td>
+                        <td class="text-center text-blue-400">$$</td>
+                        <td class="text-center"><span class="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded">Special</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

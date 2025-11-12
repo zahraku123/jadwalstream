@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+
+{% block title %}AI Bulk Scheduling - YouTube Scheduler{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto" x-data="bulkScheduling()">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-white mb-2">
+            <i class="fas fa-robot text-orange-400 mr-2"></i>
+            AI Bulk Scheduling
+        </h1>
+        <p class="text-slate-400">Generate metadata with AI and schedule videos for YouTube upload</p>
+        
+        <!-- YouTube Limits Warning -->
+        <div class="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <div class="flex items-start text-sm">
+                <i class="fas fa-exclamation-triangle text-yellow-400 mr-2 mt-0.5"></i>
+                <div class="text-yellow-300 space-y-1">
+                    <div>
+                        <strong>⚠️ YouTube Limits:</strong>
+                    </div>
+                    <div class="text-xs text-slate-300 space-y-1 ml-4">
+                        <p>• <strong>Duration:</strong> 15 min (unverified) / 12 hours (verified)</p>
+                        <p>• <strong>Daily Uploads:</strong> 6 videos per 24 hours (default quota)</p>
+                        <p>• <strong>Quota Reset:</strong> Midnight Pacific Time</p>
+                    </div>
+                    <div class="text-xs mt-2">
+                        <a href="https://www.youtube.com/verify" target="_blank" class="text-cyan-400 hover:text-cyan-300 underline">Verify Account</a> • 
+                        <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" class="text-orange-400 hover:text-orange-300 underline">Request Quota Increase</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gemini Status -->
+    {% if not gemini_configured %}
+    <div class="glass-panel rounded-xl p-4 border border-yellow-500/30 bg-yellow-500/10 mb-6">
+        <div class="flex items-center">
+            <i class="fas fa-exclamation-triangle text-yellow-400 text-2xl mr-3"></i>
+            <div class="flex-1">
+                <p class="text-yellow-400 font-medium">Gemini AI not configured</p>
+                <p class="text-sm text-yellow-300/80">Please configure Gemini API key in settings to use AI features.</p>
+            </div>
+            <a href="{{ url_for('gemini_settings') }}" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
+                Configure Now
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Step 1: Select Videos -->
+    <div class="glass-panel rounded-xl p-6 border border-orange-500/20 mb-6">
+        <h2 class="text-xl font-semibold text-white mb-4">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-600 text-white mr-2">1</span>
+            Select Looped Videos
+        </h2>
+
+        {% if videos %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for video in videos %}
+            <div class="glass-panel rounded-lg p-4 border border-dark-border hover:border-orange-500/50 transition-all">
+                <div class="flex items-start space-x-3">
+                    <input type="checkbox" 
+                           x-model="selectedVideos" 
+                           value="{{ video.id }}"
+                           id="video_{{ video.id }}"
+                           class="mt-1 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-600 rounded bg-dark-card">
+                    <label for="video_{{ video.id }}" class="flex-1 cursor-pointer">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-repeat text-pink-400 mr-2"></i>
+                            <h3 class="font-medium text-slate-200 line-clamp-2">{{ video.original_title }}</h3>
+                        </div>
+                        <p class="text-xs text-slate-400">
+                            <i class="fas fa-clock mr-1"></i>
+                            {{ video.loop_duration_minutes }} minutes
+                        </p>
+                        <p class="text-xs text-slate-500 mt-1">
+                            {{ video.output_filename }}
+                        </p>
+                    </label>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-4 text-sm text-slate-400">
+            <span x-text="selectedVideos.length"></span> video(s) selected
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <i class="fas fa-inbox text-slate-600 text-5xl mb-3"></i>
+            <p class="text-slate-400">No looped videos available. Loop videos first.</p>
+            <a href="{{ url_for('video_looping') }}" class="inline-flex items-center mt-4 text-orange-400 hover:text-orange-300">
+                <i class="fas fa-arrow-right mr-2"></i>
+                Go to Video Looping
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if videos %}
+    <!-- Step 2: Generate Metadata -->
+    <div class="glass-panel rounded-xl p-6 border border-purple-500/20 mb-6" x-show="selectedVideos.length > 0">
+        <h2 class="text-xl font-semibold text-white mb-4">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-600 text-white mr-2">2</span>
+            Generate Metadata
+        </h2>
+
+        <!-- Metadata Generation Method -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+                <i class="fas fa-cog mr-2 text-cyan-400"></i>
+                Metadata Generation Method
+            </label>
+            <select x-model="metadataMethod" 
+                    class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                <option value="ai">🤖 AI Generated (Gemini)</option>
+                <option value="random">🎲 Random from Excel Templates ({{ metadata_count }} available)</option>
+            </select>
+            <p class="mt-1 text-sm text-slate-400">Choose how to generate video metadata</p>
+        </div>
+
+        <!-- AI Keyword Input (show only for AI method) -->
+        <div x-show="metadataMethod === 'ai'" class="mb-4">
+            <label for="keyword" class="block text-sm font-medium text-slate-300 mb-2">
+                <i class="fas fa-tags mr-2 text-purple-400"></i>
+                Main Keyword
+            </label>
+            <input type="text" 
+                   x-model="keyword" 
+                   id="keyword"
+                   placeholder="e.g., Relaxing Music, Gaming Highlights, Tutorial..."
+                   class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+            <p class="mt-1 text-sm text-slate-400">AI will use this keyword to generate unique metadata for each video</p>
+        </div>
+
+        <!-- Random Method Info -->
+        <div x-show="metadataMethod === 'random'" class="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+            <div class="flex items-start">
+                <i class="fas fa-info-circle text-orange-400 mr-2 mt-0.5"></i>
+                <div class="text-sm text-orange-300">
+                    <strong>Random Selection:</strong> System will randomly pick {{ metadata_count }} metadata templates from your Excel file.
+                    {% if metadata_count == 0 %}
+                    <br><span class="text-yellow-400">⚠️ No templates available. Please upload Excel file in <a href="{{ url_for('gemini_settings') }}" class="underline">Gemini Settings</a>.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <button @click="generateMetadata()" 
+                :disabled="isGenerateDisabled()"
+                class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all">
+            <i :class="metadataMethod === 'ai' ? 'fas fa-magic' : 'fas fa-dice'" class="mr-2" :class="{'fa-spin': generating}"></i>
+            <span x-text="generating ? 'Generating...' : (metadataMethod === 'ai' ? 'Generate with AI' : 'Get Random Metadata')"></span>
+        </button>
+
+        <!-- Generated Metadata Preview -->
+        <div x-show="metadata.length > 0" class="mt-6 space-y-4">
+            <h3 class="text-lg font-semibold text-white">
+                <i class="fas fa-list mr-2 text-cyan-400"></i>
+                Generated Metadata
+            </h3>
+            
+            <template x-for="(meta, index) in metadata" :key="meta.video_id">
+                <div class="glass-panel rounded-lg p-4 border border-dark-border">
+                    <div class="mb-3">
+                        <span class="text-sm text-slate-400">Video #<span x-text="index + 1"></span></span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Title</label>
+                            <input type="text" 
+                                   x-model="meta.title" 
+                                   class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Description</label>
+                            <textarea x-model="meta.description" 
+                                      rows="3"
+                                      class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Tags</label>
+                            <input type="text" 
+                                   x-model="meta.tags" 
+                                   class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Step 3: Schedule Settings -->
+    <div class="glass-panel rounded-xl p-6 border border-cyan-500/20" x-show="metadata.length > 0">
+        <h2 class="text-xl font-semibold text-white mb-4">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-cyan-600 text-white mr-2">3</span>
+            Schedule Settings
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="start_date" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-calendar mr-2 text-cyan-400"></i>
+                    Start Publish Date
+                </label>
+                <input type="datetime-local" 
+                       x-model="startDate"
+                       id="start_date"
+                       class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                <p class="mt-1 text-sm text-slate-400">Each video will be scheduled +1 day from previous</p>
+            </div>
+
+            <div>
+                <label for="token_file" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-key mr-2 text-yellow-400"></i>
+                    YouTube Token
+                </label>
+                <select x-model="tokenFile" 
+                        id="token_file"
+                        class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                    <option value="">Select token...</option>
+                    {% for token in tokens %}
+                    <option value="{{ token }}">{{ token }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label for="privacy_status" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-eye mr-2 text-green-400"></i>
+                    Privacy Status
+                </label>
+                <select x-model="privacyStatus" 
+                        id="privacy_status"
+                        class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                    <option value="private">Private</option>
+                    <option value="unlisted">Unlisted</option>
+                    <option value="public">Public</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="thumbnail_id" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-image mr-2 text-pink-400"></i>
+                    Thumbnail (Optional)
+                </label>
+                <select x-model="thumbnailId" 
+                        id="thumbnail_id"
+                        class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                    <option value="">None</option>
+                    {% for thumbnail in thumbnails %}
+                    <option value="{{ thumbnail.id }}">{{ thumbnail.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between">
+            <div class="text-sm text-slate-400">
+                <i class="fas fa-info-circle mr-1 text-cyan-400"></i>
+                <span x-text="metadata.length"></span> videos will be added to upload queue
+            </div>
+
+            <button @click="addToQueue()" 
+                    :disabled="!startDate || !tokenFile || saving"
+                    class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all">
+                <i class="fas fa-plus mr-2"></i>
+                <span x-text="saving ? 'Adding...' : 'Add to Upload Queue'"></span>
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function bulkScheduling() {
+    return {
+        selectedVideos: [],
+        keyword: '',
+        metadata: [],
+        generating: false,
+        saving: false,
+        gemini_configured: {{ 'true' if gemini_configured else 'false' }},
+        metadataMethod: 'ai',
+        metadataCount: {{ metadata_count }},
+        startDate: '',
+        tokenFile: '',
+        streamId: '',
+        thumbnailId: '',
+        privacyStatus: 'unlisted',
+
+        isGenerateDisabled() {
+            if (this.generating || this.selectedVideos.length === 0) {
+                return true;
+            }
+            
+            if (this.metadataMethod === 'ai') {
+                return !this.gemini_configured || !this.keyword;
+            } else {
+                return this.metadataCount === 0;
+            }
+        },
+
+        async generateMetadata() {
+            if (this.selectedVideos.length === 0) {
+                alert('Please select videos');
+                return;
+            }
+
+            if (this.metadataMethod === 'ai' && !this.keyword) {
+                alert('Please enter a keyword');
+                return;
+            }
+
+            if (this.metadataMethod === 'random' && this.metadataCount === 0) {
+                alert('No metadata templates available. Please upload Excel file in Gemini Settings.');
+                return;
+            }
+
+            this.generating = true;
+
+            try {
+                const formData = new FormData();
+                this.selectedVideos.forEach(id => {
+                    formData.append('video_ids[]', id);
+                });
+                
+                if (this.metadataMethod === 'ai') {
+                    formData.append('keyword', this.keyword);
+                }
+
+                const endpoint = this.metadataMethod === 'ai' 
+                    ? '{{ url_for("generate_ai_metadata") }}' 
+                    : '{{ url_for("generate_random_metadata") }}';
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    this.metadata = result.metadata;
+                    const method = this.metadataMethod === 'ai' ? 'AI' : 'Random';
+                    alert(`✅ Successfully generated ${method} metadata for ${result.metadata.length} videos!`);
+                } else {
+                    alert('❌ Error: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('❌ Error generating metadata: ' + error.message);
+            } finally {
+                this.generating = false;
+            }
+        },
+
+        async addToQueue() {
+            if (!this.startDate || !this.tokenFile) {
+                alert('Please fill in start date and token');
+                return;
+            }
+
+            this.saving = true;
+
+            try {
+                const data = {
+                    videos: this.metadata,
+                    start_date: this.startDate,
+                    token_file: this.tokenFile,
+                    stream_id: this.streamId,
+                    thumbnail_id: this.thumbnailId,
+                    privacy_status: this.privacyStatus
+                };
+
+                const response = await fetch('{{ url_for("save_bulk_upload_queue_route") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ ' + result.message);
+                    window.location.href = '{{ url_for("bulk_upload_queue_page") }}';
+                } else {
+                    alert('❌ Error: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('❌ Error adding to queue: ' + error.message);
+            } finally {
+                this.saving = false;
+            }
+        }
+    };
+}
+</script>
+{% endblock %}
