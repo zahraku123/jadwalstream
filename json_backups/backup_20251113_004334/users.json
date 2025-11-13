@@ -8,10 +8,5 @@
         "username": "demo",
         "password_hash": "scrypt:32768:8:1$sD6HD3aCHNWfm8Cr$35f3ea86ad534abdfa6d323e5986639e0c08bef70da0c453fa0359ec02536c0b8afb4fb6a3d9bd1cd72b85a9251cda5a899e3a6a52dd1b65e96ed6095ee7eef7",
         "role": "demo"
-    },
-    "saya": {
-        "username": "saya",
-        "password_hash": "scrypt:32768:8:1$JKagsg6A9mTKvH4J$5b8d9ea24d8e81da54b2f55b8151b072073535c649674b151f5b8825377f9a47ff255530fce08866895321fd123d890eaafdc1e66478aba7aee532bb730293d8",
-        "role": "silver"
     }
 }

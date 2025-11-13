@@ -114,6 +114,38 @@
             </div>
         </div>
 
+        <!-- Scheduler Status -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 p-4 bg-dark-card/30 rounded-lg border border-dark-border">
+            <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Status</div>
+                <div class="text-sm font-semibold {{ 'text-green-400' if scheduler_status.active else 'text-slate-500' }}">
+                    <i class="fas fa-circle mr-1 {{ 'animate-pulse' if scheduler_status.active else '' }}"></i>
+                    {{ 'Active' if scheduler_status.active else 'Inactive' }}
+                </div>
+            </div>
+            
+            <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Last Run</div>
+                <div class="text-sm font-mono text-slate-300">
+                    {{ scheduler_status.last_run if scheduler_status.last_run else 'Never' }}
+                </div>
+            </div>
+            
+            <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Next Check</div>
+                <div class="text-sm font-mono text-cyan-400">
+                    {{ scheduler_status.next_check if scheduler_status.next_check else '-' }}
+                </div>
+            </div>
+            
+            <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Last Status</div>
+                <div class="text-sm font-medium {{ 'text-green-400' if 'Success' in scheduler_status.last_status else ('text-red-400' if 'Error' in scheduler_status.last_status else 'text-slate-400') }}">
+                    {{ scheduler_status.last_status if scheduler_status.last_status else 'Never run' }}
+                </div>
+            </div>
+        </div>
+
         <!-- Settings (show when enabled) -->
         <div x-show="enabled" x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-dark-card/50 rounded-lg border border-dark-border">
             <div>
@@ -379,9 +411,11 @@ function autoScheduler() {
         enabled: {{ 'true' if auto_config.get('enabled') else 'false' }},
         uploadOffsetHours: {{ auto_config.get('upload_offset_hours', 2) }},
         checkIntervalMinutes: {{ auto_config.get('check_interval_minutes', 5) }},
+        toggleChanged: false,
         
         async toggleScheduler() {
             this.enabled = !this.enabled;
+            this.toggleChanged = true;
             await this.saveSettings();
         },
         
@@ -399,21 +433,48 @@ function autoScheduler() {
                     })
                 });
                 
+                // Check if response is ok
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Server error:', response.status, errorText);
+                    
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        alert(errorJson.error || 'Failed to save settings');
+                    } catch {
+                        alert(`Error saving settings: ${response.status}`);
+                    }
+                    
+                    // Revert toggle if it was changed
+                    if (this.toggleChanged) {
+                        this.enabled = !this.enabled;
+                        this.toggleChanged = false;
+                    }
+                    return;
+                }
+                
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Show toast notification (optional)
-                    console.log('Auto upload scheduler settings saved:', result.config);
+                    // Show success notification
+                    console.log('✓ Auto upload scheduler settings saved:', result.config);
+                    this.toggleChanged = false;
                 } else {
-                    alert('Failed to save settings');
-                    // Revert toggle
-                    this.enabled = !this.enabled;
+                    alert(result.error || 'Failed to save settings');
+                    // Revert toggle if it was changed
+                    if (this.toggleChanged) {
+                        this.enabled = !this.enabled;
+                        this.toggleChanged = false;
+                    }
                 }
             } catch (error) {
-                console.error('Error:', error);
-                alert('Error saving settings');
-                // Revert toggle
-                this.enabled = !this.enabled;
+                console.error('Error saving settings:', error);
+                alert('Error saving settings: ' + error.message);
+                // Revert toggle if it was changed
+                if (this.toggleChanged) {
+                    this.enabled = !this.enabled;
+                    this.toggleChanged = false;
+                }
             }
         }
     };

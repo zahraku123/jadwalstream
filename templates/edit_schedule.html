@@ -179,9 +179,11 @@ function editScheduleForm() {
             for (const [token, streams] of Object.entries(mapping)) {
                 if (streams && typeof streams === 'object') {
                     Object.entries(streams).forEach(([id, meta]) => {
-                        if (meta && meta.title) {
+                        // Support both old format (meta.title) and new format (meta.stream_name)
+                        const streamTitle = meta && (meta.stream_name || meta.title);
+                        if (streamTitle) {
                             allStreams[id] = {
-                                title: meta.title,
+                                title: streamTitle,
                                 token: token
                             };
                         }

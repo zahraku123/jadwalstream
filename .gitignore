@@ -79,3 +79,5 @@ package-lock.json
 
 # Windows installer
 install.bat
+# Ignore backup files with tokens
+archive/backups/*.json

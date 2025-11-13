@@ -135,10 +135,10 @@
                                 <tbody>
                                     {% for stream_id, meta in streams.items() %}
                                     <tr>
-                                        <td class="font-medium text-white">{{ meta['title'] if meta and 'title' in meta else stream_id }}</td>
+                                        <td class="font-medium text-white">{{ meta['stream_name'] if meta and 'stream_name' in meta else stream_id }}</td>
                                         <td>
-                                            {% if meta and 'cdn' in meta and 'ingestionInfo' in meta['cdn'] and 'streamName' in meta['cdn']['ingestionInfo'] %}
-                                            <code class="cyber-code success">{{ meta['cdn']['ingestionInfo']['streamName'] }}</code>
+                                            {% if meta and 'stream_key' in meta and meta['stream_key'] %}
+                                            <code class="cyber-code success">{{ meta['stream_key'] }}</code>
                                             {% else %}
                                             <span class="text-slate-500 text-xs italic">Not available</span>
                                             {% endif %}

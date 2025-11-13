@@ -50,14 +50,6 @@ from database_helpers import (
     delete_token_mappings_data
 )
 from database import get_schedules, get_all_schedules, init_database
-from user_limits import (
-    get_user_limits,
-    can_user_add_stream,
-    can_user_upload,
-    update_user_limits,
-    get_all_users_with_limits,
-    calculate_user_storage
-)
 
 import psutil
 import platform
@@ -65,23 +57,6 @@ from license_validator import LicenseValidator, check_license
 from hwid import get_hwid, get_system_info
 import telegram_notifier
 from functools import wraps
-
-
-# Admin-only decorator (checks is_admin instead of role)
-def require_admin(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return redirect(url_for('login'))
-        
-        from database import get_user_by_id
-        user_data = get_user_by_id(int(current_user.id))
-        if not user_data or not user_data.get('is_admin'):
-            flash('Admin access required', 'error')
-            return redirect(url_for('index'))
-        
-        return f(*args, **kwargs)
-    return decorated_function
 
 # Decorator to check if user is demo role
 def demo_readonly(f):
@@ -98,7 +73,6 @@ EXCEL_FILE = 'live_stream_data.xlsx'
 TIMEZONE = 'Asia/Jakarta'
 SCOPES = ['https://www.googleapis.com/auth/youtube']
 SCHEDULER_STATUS_FILE = 'scheduler_status.json'
-AUTO_UPLOAD_SCHEDULER_STATUS_FILE = 'auto_upload_scheduler_status.json'
 VIDEO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv'}
 THUMBNAIL_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'thumbnails')
@@ -156,25 +130,26 @@ def load_user(user_id):
     return get_user_by_id(user_id)
 
 # ==== Role helpers ====
-# Simplified role system: admin and user only
 ROLE_LIMITS = {
-    'user': None,  # unlimited (or use user_limits from database)
+    'demo': 0,
+    'silver': 3,
+    'gold': 10,
+    'platinum': 20,
     'admin': None,  # unlimited
 }
 
 def role_max_streams(role):
-    """Get max streams for role (deprecated - use user_limits table instead)"""
-    role = (role or 'user').lower()
-    return ROLE_LIMITS.get(role, None)
+    role = (role or 'demo').lower()
+    return ROLE_LIMITS.get(role, 0)
 
 def role_can_manage(role):
-    """Check if role can manage system (admin only)"""
     return (role or '').lower() == 'admin'
 
 def role_can_add_streams(role):
-    """Check if role can add streams (all users can, but limited by user_limits)"""
-    # All authenticated users can add streams (limits checked separately via user_limits table)
-    return role is not None and role.lower() in ['user', 'admin']
+    if role is None:
+        return False
+    role = role.lower()
+    return role in ['silver', 'gold', 'platinum', 'admin']
 
 # ==== License System ====
 @app.before_request
@@ -212,40 +187,24 @@ os.makedirs(THUMBNAIL_FOLDER, exist_ok=True)
 os.makedirs(TOKENS_FOLDER, exist_ok=True)
 
 # Helper function to get list of token files
-def get_token_files(user_id=None):
-    """Get list of token files from tokens folder, filtered by user_id if provided"""
+def get_token_files():
+    """Get list of token files from tokens folder, excluding client_secret.json"""
     try:
-        # If user_id provided, use per-user folder
-        if user_id:
-            user_tokens_folder = os.path.join(TOKENS_FOLDER, f'user_{user_id}')
-            if not os.path.exists(user_tokens_folder):
-                os.makedirs(user_tokens_folder, exist_ok=True)
-            tokens = [f for f in os.listdir(user_tokens_folder) if f.endswith('.json')]
-        else:
-            # Legacy: no user_id, use root tokens folder
-            if not os.path.exists(TOKENS_FOLDER):
-                os.makedirs(TOKENS_FOLDER, exist_ok=True)
-            tokens = [f for f in os.listdir(TOKENS_FOLDER) if f.endswith('.json')]
+        if not os.path.exists(TOKENS_FOLDER):
+            os.makedirs(TOKENS_FOLDER, exist_ok=True)
+        tokens = [f for f in os.listdir(TOKENS_FOLDER) if f.endswith('.json')]
         return sorted(tokens)
     except Exception as e:
         print(f"Error getting token files: {e}")
         return []
 
-def get_token_path(token_name, user_id=None):
+def get_token_path(token_name):
     """Get full path for a token file"""
     if not token_name:
         return None
     # Ensure it has .json extension
     if not token_name.endswith('.json'):
         token_name += '.json'
-    
-    # If user_id provided, use per-user folder
-    if user_id:
-        user_tokens_folder = os.path.join(TOKENS_FOLDER, f'user_{user_id}')
-        os.makedirs(user_tokens_folder, exist_ok=True)
-        return os.path.join(user_tokens_folder, token_name)
-    
-    # Legacy: root tokens folder
     return os.path.join(TOKENS_FOLDER, token_name)
 
 # Create a static folder link to videos folder for serving videos
@@ -479,15 +438,7 @@ def start_ffmpeg_stream(stream):
             stream_key = stream.get('stream_key', '')
             broadcast_link = f"https://studio.youtube.com" if rtmp_server == 'youtube' else "Custom RTMP"
             
-            # Get user_id from stream owner
-            user_id = None
-            if stream.get('owner'):
-                from user_auth import get_user_by_username
-                user_data = get_user_by_username(stream['owner'])
-                if user_data:
-                    user_id = user_data['id']
-            
-            telegram_notifier.notify_stream_starting(stream_title, scheduled_time, broadcast_link, user_id=user_id)
+            telegram_notifier.notify_stream_starting(stream_title, scheduled_time, broadcast_link)
         except Exception as e:
             print(f"[TELEGRAM] Failed to send stream start notification: {e}")
         
@@ -596,16 +547,7 @@ def stop_ffmpeg_stream(stream_id):
                 stream_title = stream.get('title', 'Unknown')
                 duration = stream.get('duration', None)
                 duration_text = f"{duration} minutes" if duration else None
-                
-                # Get user_id from stream owner
-                user_id = None
-                if stream.get('owner'):
-                    from user_auth import get_user_by_username
-                    user_data = get_user_by_username(stream['owner'])
-                    if user_data:
-                        user_id = user_data['id']
-                
-                telegram_notifier.notify_stream_ended(stream_title, duration_text, user_id=user_id)
+                telegram_notifier.notify_stream_ended(stream_title, duration_text)
             except Exception as e:
                 print(f"[TELEGRAM] Failed to send stream stop notification: {e}")
             
@@ -749,34 +691,6 @@ def get_scheduler_status():
             'active': False
         }
 
-def save_auto_upload_scheduler_status(status):
-    """Save auto upload scheduler status"""
-    try:
-        with open(AUTO_UPLOAD_SCHEDULER_STATUS_FILE, 'w') as f:
-            json.dump({
-                'last_run': status.get('last_run', ''),
-                'next_check': status.get('next_check', ''),
-                'last_status': status.get('last_status', ''),
-                'active': status.get('active', False),
-                'uploads_processed': status.get('uploads_processed', 0)
-            }, f)
-    except Exception as e:
-        print(f"Error saving auto upload scheduler status: {e}")
-
-def get_auto_upload_scheduler_status():
-    """Get auto upload scheduler status"""
-    try:
-        with open(AUTO_UPLOAD_SCHEDULER_STATUS_FILE, 'r') as f:
-            return json.load(f)
-    except:
-        return {
-            'last_run': '',
-            'next_check': '',
-            'last_status': 'Never run',
-            'active': False,
-            'uploads_processed': 0
-        }
-
 def get_stream_name(stream_id):
     """Convert stream ID to stream name using the mapping from live.py"""
     if not stream_id:
@@ -791,16 +705,16 @@ def get_stream_name(stream_id):
     except Exception:
         pass
 
-    # Fallback: try to read our saved stream_mapping from database and find a title
+    # Fallback: try to read our saved stream_mapping.json and find a title
     try:
         mapping = get_stream_mapping()
         for token, streams in mapping.items():
-            # streams expected: {streamId: {stream_name: ..., ...}}
+            # streams expected: {streamId: {title: ..., ...}}
             for sid, meta in (streams or {}).items():
                 if sid == stream_id:
-                    # meta might be a dict with stream_name (new) or title (old)
+                    # meta might be a dict with a title
                     if isinstance(meta, dict):
-                        return meta.get('stream_name') or meta.get('title') or meta.get('name') or stream_id
+                        return meta.get('title') or meta.get('name') or stream_id
                     # otherwise meta might be a string name
                     return str(meta)
     except Exception:
@@ -809,60 +723,22 @@ def get_stream_name(stream_id):
     # Last resort: return the provided value unchanged
     return stream_id
 
-def load_schedule_times(user_id=None):
-    """Load schedule times - PER USER if user_id provided, else global"""
-    if user_id:
-        # Load from database for specific user
-        try:
-            from database import get_db_connection
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT scheduler_times FROM users WHERE id = ?', (user_id,))
-                row = cursor.fetchone()
-                if row and row['scheduler_times']:
-                    return json.loads(row['scheduler_times'])
-        except Exception as e:
-            logging.error(f"Error loading schedule times for user {user_id}: {e}")
-    
-    # Fallback to global config file (legacy)
+def load_schedule_times():
     try:
         with open('schedule_config.json', 'r') as f:
             config = json.load(f)
-            return config.get('schedule_times', [])
+            return config.get('schedule_times', ["00:35", "00:37", "00:39"])
     except:
-        return []
+        return ["00:35", "00:37", "00:39"]
 
-def save_schedule_times(times, user_id=None):
-    """Save schedule times - PER USER if user_id provided, else global"""
-    if user_id:
-        # Save to database for specific user
-        try:
-            from database import get_db_connection
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE users 
-                    SET scheduler_times = ?
-                    WHERE id = ?
-                ''', (json.dumps(times), user_id))
-                conn.commit()
-                return True
-        except Exception as e:
-            logging.error(f"Error saving schedule times for user {user_id}: {e}")
-            return False
-    
-    # Fallback to global config file (legacy)
+def save_schedule_times(times):
     with open('schedule_config.json', 'w') as f:
         json.dump({'schedule_times': times}, f)
 
 def get_stream_mapping():
-    """Get stream mappings for current user from database"""
-    from database import get_stream_mappings
+    """Get stream mappings for current user from SQLite"""
     try:
-        if current_user.is_authenticated:
-            user_id = int(current_user.id)
-            return get_stream_mappings(user_id)
-        return {}
+        return get_stream_mapping_sqlite()
     except Exception as e:
         print(f"Error getting stream mappings: {e}")
         return {}
@@ -870,47 +746,51 @@ def get_stream_mapping():
 @app.route('/edit_schedule/<int:index>', methods=['GET'])
 @login_required
 def edit_schedule(index):
-    """Edit schedule - FROM DATABASE (index is actually schedule_id)"""
     # Restrict demo role from editing schedules
     role = getattr(current_user, 'role', 'demo')
     if not role_can_add_streams(role) and not role_can_manage(role):
         flash('Akses ditolak: role demo tidak dapat mengedit jadwal.', 'error')
         return redirect(url_for('schedules'))
     try:
-        user_id = int(current_user.id)
-        schedule_id = index  # Using 'index' param for backward compatibility, but it's actually schedule_id
-        
-        # Get schedule from database
-        from database import get_schedule_by_id
-        db_schedule = get_schedule_by_id(schedule_id, user_id)
-        
-        if not db_schedule:
-            flash('Schedule not found!', 'error')
+        # Read the Excel file
+        if not os.path.exists(EXCEL_FILE):
+            flash('Schedule file not found!', 'error')
             return redirect(url_for('schedules'))
+        df = pd.read_excel(EXCEL_FILE)
+        schedule = df.iloc[index].to_dict()
         
-        # Convert to format compatible with template
-        schedule = {
-            'title': db_schedule['title'],
-            'description': db_schedule.get('description', ''),
-            'scheduledStartTime': db_schedule['scheduled_start_time'],
-            'videoFile': db_schedule.get('video_file', ''),
-            'thumbnailFile': db_schedule.get('thumbnail', '').replace('thumbnails/', ''),
-            'tokenFile': db_schedule.get('token_file', ''),
-            'privacyStatus': db_schedule.get('privacy_status', 'unlisted'),
-            'streamNameExisting': db_schedule.get('stream_name', ''),
-            'streamIdExisting': db_schedule.get('stream_id', ''),
-            'autoStart': bool(db_schedule.get('auto_start', 0)),
-            'autoStop': bool(db_schedule.get('auto_stop', 0)),
-            'madeForKids': bool(db_schedule.get('made_for_kids', 0)),
-            'repeat_daily': bool(db_schedule.get('repeat_daily', 0))
-        }
+        # Clean up NaN values
+        for key, value in schedule.items():
+            if pd.isna(value):
+                schedule[key] = ''
         
-        # Get user resources
-        tokens = get_token_files(user_id)
+        # Handle the datetime conversion
+        try:
+            # Try to parse the datetime from the Excel value
+            dt = pd.to_datetime(schedule['scheduledStartTime'])
+            # Format it for the datetime-local input
+            schedule['scheduledStartTime'] = dt.strftime('%Y-%m-%dT%H:%M')
+        except:
+            # If parsing fails, try to use the value as-is if it's properly formatted
+            current_value = str(schedule.get('scheduledStartTime', ''))
+            if 'T' in current_value:  # Check if it's already in the correct format
+                schedule['scheduledStartTime'] = current_value
+            else:
+                schedule['scheduledStartTime'] = ''  # Set empty if invalid
+        
+        # Normalize thumbnail path - remove 'thumbnails/' prefix for comparison
+        if schedule.get('thumbnailFile'):
+            schedule['thumbnailFile'] = schedule['thumbnailFile'].replace('thumbnails/', '')
+        
+        # Ensure boolean fields are actual booleans
+        for bool_field in ['autoStart', 'autoStop', 'madeForKids', 'useExistingStream', 'repeat_daily']:
+            if bool_field in schedule:
+                schedule[bool_field] = bool(schedule[bool_field])
+        
+        tokens = get_token_files()
         stream_mapping = get_stream_mapping()
         thumbnails = get_thumbnail_database()
-        
-        return render_template('edit_schedule.html', schedule=schedule, index=schedule_id, 
+        return render_template('edit_schedule.html', schedule=schedule, index=index, 
                              tokens=tokens, stream_mapping=stream_mapping, thumbnails=thumbnails)
     except Exception as e:
         flash(f'Error: {str(e)}', 'error')
@@ -920,18 +800,19 @@ def edit_schedule(index):
 @login_required
 @demo_readonly
 def update_schedule(index):
-    """Update schedule in database - PER USER (index is actually schedule_id)"""
     # Restrict demo role from updating schedules
     role = getattr(current_user, 'role', 'demo')
     if not role_can_add_streams(role) and not role_can_manage(role):
         flash('Akses ditolak: role demo tidak dapat mengubah jadwal.', 'error')
         return redirect(url_for('schedules'))
     try:
-        user_id = int(current_user.id)
-        schedule_id = index  # Using 'index' param for backward compatibility
         data = request.form.to_dict()
+        if not os.path.exists(EXCEL_FILE):
+            flash('Schedule file not found!', 'error')
+            return redirect(url_for('schedules'))
+        df = pd.read_excel(EXCEL_FILE)
         
-        # Resolve stream name
+        # Resolve stream name and log for debugging
         submitted_stream = data.get('streamNameExisting', '')
         resolved_stream = get_stream_name(submitted_stream)
         app.logger.debug(f"update_schedule: submitted stream='{submitted_stream}' resolved='{resolved_stream}'")
@@ -941,29 +822,24 @@ def update_schedule(index):
         if thumbnail_file and not thumbnail_file.startswith('thumbnails/'):
             thumbnail_file = f'thumbnails/{thumbnail_file}'
         
-        # Update in database
-        from database import update_schedule as db_update_schedule
-        updates = {
-            'title': data['title'],
-            'description': data.get('description', ''),
-            'scheduled_start_time': data['scheduledStartTime'],
-            'video_file': data.get('videoFile', ''),
-            'thumbnail': thumbnail_file,
-            'stream_name': resolved_stream,
-            'stream_id': data.get('streamIdExisting', ''),
-            'token_file': data['tokenFile'],
-            'privacy_status': data.get('privacyStatus', 'unlisted'),
-            'auto_start': 1 if data.get('autoStart') == 'on' else 0,
-            'auto_stop': 1 if data.get('autoStop') == 'on' else 0,
-            'made_for_kids': 1 if data.get('madeForKids') == 'on' else 0,
-            'repeat_daily': 1 if data.get('repeat_daily') == 'on' else 0
-        }
+        # Update the row
+        df.loc[index, 'title'] = data['title']
+        df.loc[index, 'description'] = data['description']
+        df.loc[index, 'scheduledStartTime'] = data['scheduledStartTime']
+        df.loc[index, 'privacyStatus'] = data.get('privacyStatus', 'unlisted')
+        df.loc[index, 'autoStart'] = data.get('autoStart') == 'on'
+        df.loc[index, 'autoStop'] = data.get('autoStop') == 'on'
+        df.loc[index, 'madeForKids'] = data.get('madeForKids') == 'on'
+        df.loc[index, 'tokenFile'] = data['tokenFile']
+        df.loc[index, 'useExistingStream'] = data.get('useExistingStream') == 'on'
+        df.loc[index, 'streamNameExisting'] = resolved_stream
+        df.loc[index, 'thumbnailFile'] = thumbnail_file
+        df.loc[index, 'repeat_daily'] = data.get('repeat_daily') == 'on'
         
-        db_update_schedule(schedule_id, user_id, updates)
+        # Save the changes
+        df.to_excel(EXCEL_FILE, index=False)
         flash('Schedule updated successfully!', 'success')
-        
     except Exception as e:
-        logging.error(f"Error updating schedule: {e}")
         flash(f'Error: {str(e)}', 'error')
     
     return redirect(url_for('schedules'))
@@ -972,25 +848,20 @@ def update_schedule(index):
 @login_required
 @demo_readonly
 def delete_schedule(index):
-    """Delete schedule from database - PER USER (index is actually schedule_id)"""
     # Restrict demo role from deleting schedules
     role = getattr(current_user, 'role', 'demo')
     if not role_can_add_streams(role) and not role_can_manage(role):
         flash('Akses ditolak: role demo tidak dapat menghapus jadwal.', 'error')
         return redirect(url_for('schedules'))
     try:
-        user_id = int(current_user.id)
-        schedule_id = index  # Using 'index' param for backward compatibility
-        
-        # Delete from database
-        from database import delete_schedule as db_delete_schedule
-        if db_delete_schedule(schedule_id, user_id):
-            flash('Schedule deleted successfully!', 'success')
-        else:
-            flash('Schedule not found or access denied!', 'error')
-            
+        if not os.path.exists(EXCEL_FILE):
+            flash('Schedule file not found!', 'error')
+            return redirect(url_for('schedules'))
+        df = pd.read_excel(EXCEL_FILE)
+        df = df.drop(index)
+        df.to_excel(EXCEL_FILE, index=False)
+        flash('Schedule deleted successfully!', 'success')
     except Exception as e:
-        logging.error(f"Error deleting schedule: {e}")
         flash(f'Error: {str(e)}', 'error')
     
     return redirect(url_for('schedules'))
@@ -998,34 +869,35 @@ def delete_schedule(index):
 @app.route('/stream_keys')
 @login_required
 def stream_keys():
-    # Get available tokens (per-user)
-    user_id = int(current_user.id)
-    tokens = get_token_files(user_id)
-    # Get current stream mapping from database
-    from database import get_stream_mappings
-    stream_mapping = get_stream_mappings(user_id)
+    # Get available tokens
+    tokens = get_token_files()
+    # Get current stream mapping
+    stream_mapping = get_stream_mapping()
     return render_template('stream_keys.html', tokens=tokens, stream_mapping=stream_mapping)
 
 
 @app.route('/manage_streams')
 @login_required
 def manage_streams():
-    from database import get_stream_mappings
-    user_id = int(current_user.id)
-    stream_mapping = get_stream_mappings(user_id)
+    from kunci import load_stream_mapping
+    stream_mapping = load_stream_mapping()
     return render_template('manage_streams.html', stream_mapping=stream_mapping)
 
 
 @app.route('/delete_stream_mapping', methods=['POST'])
 @login_required
 def delete_stream_mapping():
-    from database import delete_stream_mapping as db_delete_stream_mapping
-    
-    user_id = int(current_user.id)
     token_file = request.form.get('token_file')
     stream_id = request.form.get('stream_id')
     try:
-        if db_delete_stream_mapping(user_id, token_file, stream_id):
+        mapping = get_stream_mapping()
+        if token_file in mapping and stream_id in mapping[token_file]:
+            del mapping[token_file][stream_id]
+            # if token has no more streams, keep empty dict or remove key
+            if not mapping[token_file]:
+                mapping.pop(token_file, None)
+            with open('stream_mapping.json', 'w') as f:
+                json.dump(mapping, f, indent=4)
             flash('Stream mapping deleted.', 'success')
         else:
             flash('Stream mapping not found.', 'warning')
@@ -1037,12 +909,13 @@ def delete_stream_mapping():
 @app.route('/delete_token_mapping', methods=['POST'])
 @login_required
 def delete_token_mapping():
-    from database import delete_token_mappings
-    
-    user_id = int(current_user.id)
     token_file = request.form.get('token_file')
     try:
-        if delete_token_mappings(user_id, token_file):
+        mapping = get_stream_mapping()
+        if token_file in mapping:
+            mapping.pop(token_file, None)
+            with open('stream_mapping.json', 'w') as f:
+                json.dump(mapping, f, indent=4)
             flash('Token mappings deleted.', 'success')
         else:
             flash('Token not found in mappings.', 'warning')
@@ -1054,11 +927,8 @@ def delete_token_mapping():
 @app.route('/export_stream_mapping', methods=['POST'])
 @login_required
 def export_stream_mapping():
-    from database import get_stream_mappings
-    
-    user_id = int(current_user.id)
     try:
-        mapping = get_stream_mappings(user_id)
+        mapping = get_stream_mapping()
         data = json.dumps(mapping, indent=4)
         return (data, 200, {
             'Content-Type': 'application/json',
@@ -1072,49 +942,23 @@ def export_stream_mapping():
 @login_required
 @demo_readonly
 def fetch_stream_keys():
-    from kunci import get_stream_keys
-    from database import save_stream_mapping
-    
-    user_id = int(current_user.id)
+    from kunci import get_stream_keys, save_stream_mapping
     token_file = request.form.get('token_file')
     if not token_file:
         flash('Please select a token file', 'error')
         return redirect(url_for('stream_keys'))
     
     try:
-        # Get full token path using per-user folder structure
-        token_path = get_token_path(token_file, user_id)
-        
-        if not os.path.exists(token_path):
-            flash(f'Token file not found: {token_file}', 'error')
-            return redirect(url_for('stream_keys'))
-        
         # Get stream keys from YouTube
-        stream_keys = get_stream_keys(token_path)
+        stream_keys = get_stream_keys(token_file)
         if stream_keys:
-            # Save each stream to database
-            saved_count = 0
-            for stream_id, stream_data in stream_keys.items():
-                # Extract stream key from cdn info
-                stream_key = ''
-                stream_name = stream_data.get('title', '')
-                if 'cdn' in stream_data and 'ingestionInfo' in stream_data['cdn']:
-                    stream_key = stream_data['cdn']['ingestionInfo'].get('streamName', '')
-                
-                # Save to database
-                if save_stream_mapping(user_id, token_file, stream_id, {
-                    'stream_name': stream_name,
-                    'stream_key': stream_key,
-                    'metadata': stream_data
-                }):
-                    saved_count += 1
-            
-            if saved_count > 0:
-                flash(f'Successfully fetched and saved {saved_count} stream key(s)!', 'success')
+            # Save to stream_mapping.json under the token filename (merge existing)
+            if save_stream_mapping(stream_keys, token_file):
+                flash('Stream keys fetched and saved successfully!', 'success')
             else:
-                flash('No stream keys were saved', 'warning')
+                flash('Error saving stream keys', 'error')
         else:
-            flash('No stream keys found in this channel', 'warning')
+            flash('No stream keys found', 'warning')
     except Exception as e:
         flash(f'Error: {str(e)}', 'error')
     
@@ -1124,10 +968,6 @@ def fetch_stream_keys():
 @login_required
 def create_new_stream():
     """Create a new stream key in YouTube Studio"""
-    from kunci import get_youtube_service
-    from database import save_stream_mapping
-    
-    user_id = int(current_user.id)
     stream_title = request.form.get('stream_title', '').strip()
     token_file = request.form.get('token_file')
     
@@ -1140,15 +980,11 @@ def create_new_stream():
         return redirect(url_for('stream_keys'))
     
     try:
-        # Get full token path using per-user folder structure
-        token_path = get_token_path(token_file, user_id)
-        
-        if not os.path.exists(token_path):
-            flash(f'Token file not found: {token_file}', 'error')
-            return redirect(url_for('stream_keys'))
+        # Import YouTube service
+        from kunci import get_youtube_service
         
         # Create YouTube service using token
-        youtube = get_youtube_service(token_path)
+        youtube = get_youtube_service(token_file)
         
         # Create new live stream
         stream_body = {
@@ -1166,16 +1002,27 @@ def create_new_stream():
         ).execute()
         
         stream_id = response['id']
-        stream_key = response['cdn']['ingestionInfo']['streamName']
+        stream_name = response['cdn']['ingestionInfo']['streamName']
         
-        # Save to database
-        save_stream_mapping(user_id, token_file, stream_id, {
-            'stream_name': stream_title,
-            'stream_key': stream_key,
-            'metadata': response
-        })
+        # Save to stream_mapping.json
+        import json
+        mapping = {}
+        if os.path.exists('stream_mapping.json'):
+            with open('stream_mapping.json', 'r') as f:
+                mapping = json.load(f)
         
-        flash(f'Stream key created successfully! Title: "{stream_title}", Key: {stream_key}', 'success')
+        if token_file not in mapping:
+            mapping[token_file] = {}
+        
+        mapping[token_file][stream_id] = {
+            'title': stream_title,
+            'cdn': response['cdn']
+        }
+        
+        with open('stream_mapping.json', 'w') as f:
+            json.dump(mapping, f, indent=2)
+        
+        flash(f'Stream key created successfully! Title: "{stream_title}", Key: {stream_name}', 'success')
         
     except Exception as e:
         flash(f'Error creating stream: {str(e)}', 'error')
@@ -1221,7 +1068,7 @@ def register():
             flash('Konfirmasi password tidak cocok', 'error')
             return redirect(url_for('register'))
         
-        ok, msg = create_user(username, password, role='user')
+        ok, msg = create_user(username, password, role='demo')
         if ok:
             flash('Registrasi berhasil, silakan login', 'success')
             return redirect(url_for('login'))
@@ -1240,7 +1087,6 @@ def logout():
 
 @app.route('/license', methods=['GET', 'POST'])
 @login_required
-@require_admin
 def license_page():
     """License management page"""
     validator = LicenseValidator()
@@ -1281,26 +1127,6 @@ def license_page():
                          message=message,
                          days_remaining=days)
 
-
-# Helper function to get user usage for templates
-def get_current_user_usage():
-    """Get current user's usage stats for display in templates"""
-    if not current_user.is_authenticated:
-        return None
-    
-    from user_limits import get_user_limits
-    try:
-        user_id = int(current_user.id)
-        limits = get_user_limits(user_id)
-        return limits
-    except:
-        return None
-
-# Make it available in all templates
-@app.context_processor
-def inject_user_usage():
-    return dict(user_usage=get_current_user_usage())
-
 @app.route('/')
 def home():
     # Show landing page if not authenticated
@@ -1314,9 +1140,8 @@ def home():
     except:
         schedules = []
 
-    # Get tokens (per-user)
-    user_id = int(current_user.id)
-    tokens = get_token_files(user_id)
+    # Get tokens
+    tokens = get_token_files()
     
     return render_template('index.html', schedules=schedules, tokens=tokens)
 
@@ -1398,9 +1223,8 @@ def api_dashboard_stats():
         scheduled_streams = len([s for s in streams if s.get('status') == 'scheduled'])
         completed_streams = len([s for s in streams if s.get('status') == 'completed'])
         
-        # Get tokens count (per-user)
-        user_id = int(current_user.id)
-        tokens = get_token_files(user_id)
+        # Get tokens count
+        tokens = get_token_files()
         total_tokens = len(tokens)
         
         # Get videos count
@@ -1535,27 +1359,6 @@ def video_gallery():
 @login_required
 @demo_readonly
 def upload_video():
-    # Check storage limit before upload
-    from user_limits import can_user_upload
-    
-    user_id = int(current_user.id)
-    files = request.files.getlist('video_files')
-    
-    # Calculate total size
-    total_size = 0
-    for file in files:
-        if file and hasattr(file, 'content_length') and file.content_length:
-            total_size += file.content_length
-    
-    total_size_mb = total_size / (1024 * 1024) if total_size > 0 else 0
-    
-    # Check if user can upload this size
-    can_upload, message = can_user_upload(user_id, total_size_mb)
-    if not can_upload:
-        flash(f'Upload failed: {message}', 'error')
-        return redirect(url_for('video_gallery'))
-    
-    # Continue with original upload logic...
     # Check if multiple files or single file
     files = request.files.getlist('video_files')
     
@@ -1573,7 +1376,7 @@ def upload_video():
     
     uploaded_count = 0
     failed_count = 0
-    from database_helpers import add_video_to_db
+    videos_db = get_video_database()
     
     for file in files:
         if file.filename == '':
@@ -1613,30 +1416,30 @@ def upload_video():
                 # Use original filename as title (without extension)
                 video_title = original_filename.rsplit('.', 1)[0]
                 
-                # Add to database using proper function
-                video_data = {
-                    'id': str(uuid.uuid4()),  # Generate unique ID
+                # Add to database
+                videos_db.append({
+                    'id': str(uuid.uuid4()),
                     'title': video_title,
                     'filename': unique_filename,
                     'original_filename': original_filename,
-                    'thumbnail': thumbnail_filename if thumbnail_filename else '',
+                    'thumbnail': thumbnail_filename,
+                    'date_added': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'source': 'local'
-                }
-                
-                add_video_to_db(video_data)  # ✅ Saves to database properly
+                })
                 
                 uploaded_count += 1
                 logging.info(f"Successfully uploaded: {original_filename}")
                 
             except Exception as e:
                 failed_count += 1
-                error_msg = str(e)
-                logging.error(f"Failed to upload {file.filename}: {error_msg}")
-                import traceback
-                logging.error(f"Traceback: {traceback.format_exc()}")
+                logging.error(f"Failed to upload {file.filename}: {e}")
         else:
             failed_count += 1
             logging.warning(f"Invalid file type: {file.filename}")
+    
+    # Save database once after all uploads
+    if uploaded_count > 0:
+        save_video_database(videos_db)
     
     # Always return JSON response (form submission via AJAX)
     if uploaded_count > 0 and failed_count == 0:
@@ -1646,9 +1449,7 @@ def upload_video():
         message = f'{uploaded_count} uploaded, {failed_count} failed'
         return jsonify({'success': True, 'message': message, 'uploaded': uploaded_count, 'failed': failed_count}), 200
     else:
-        error_msg = 'All uploads failed. Check logs for details.'
-        logging.error(f"Upload failed - uploaded: {uploaded_count}, failed: {failed_count}")
-        return jsonify({'success': False, 'message': error_msg}), 200  # Changed to 200 to avoid frontend error
+        return jsonify({'success': False, 'message': 'All uploads failed'}), 400
 
 @app.route('/import-from-drive', methods=['POST'])
 @login_required
@@ -1702,16 +1503,17 @@ def import_from_drive():
                 f.write(chunk)
         
         # Add to database
-        from database_helpers import add_video_to_db
-        video_data = {
-            'id': str(uuid.uuid4()),  # Generate unique ID
+        videos = get_video_database()
+        videos.append({
+            'id': str(uuid.uuid4()),
             'title': video_title,
             'filename': unique_filename,
             'original_filename': f"google_drive_{file_id}.{file_extension}",
+            'date_added': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'source': 'google_drive',
             'drive_file_id': file_id
-        }
-        add_video_to_db(video_data)  # ✅ Saves to database properly
+        })
+        save_video_database(videos)
         
         flash('Video imported from Google Drive successfully!', 'success')
     except Exception as e:
@@ -1723,7 +1525,6 @@ def import_from_drive():
 @login_required
 @demo_readonly
 def delete_video(video_id):
-    """Delete video - FROM DATABASE"""
     videos = get_video_database()
     
     # Find the video to delete
@@ -1739,15 +1540,9 @@ def delete_video(video_id):
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Delete thumbnail if exists
-        if video_to_delete.get('thumbnail'):
-            thumbnail_path = os.path.join(THUMBNAIL_FOLDER, video_to_delete['thumbnail'])
-            if os.path.exists(thumbnail_path):
-                os.remove(thumbnail_path)
-        
         # Remove from database
-        from database_helpers import delete_video_from_db
-        delete_video_from_db(video_id)  # ✅ Deletes from database properly
+        videos = [v for v in videos if v['id'] != video_id]
+        save_video_database(videos)
         
         flash('Video deleted successfully!', 'success')
     else:
@@ -1792,14 +1587,15 @@ def upload_thumbnail():
         
         # Add to database
         thumbnail_title = request.form.get('thumbnail_title', 'Untitled Thumbnail')
-        from database_helpers import add_thumbnail_to_db
-        thumbnail_data = {
-            'id': str(uuid.uuid4()),  # Generate unique ID
+        thumbnails = get_thumbnail_database()
+        thumbnails.append({
+            'id': str(uuid.uuid4()),
             'title': thumbnail_title,
             'filename': unique_filename,
-            'original_filename': original_filename
-        }
-        add_thumbnail_to_db(thumbnail_data)  # ✅ Saves to database properly
+            'original_filename': original_filename,
+            'date_added': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        save_thumbnail_database(thumbnails)
         
         flash('Thumbnail uploaded successfully!', 'success')
         return redirect(url_for('thumbnail_gallery'))
@@ -1811,7 +1607,6 @@ def upload_thumbnail():
 @login_required
 @demo_readonly
 def delete_thumbnail(thumbnail_id):
-    """Delete thumbnail - FROM DATABASE"""
     thumbnails = get_thumbnail_database()
     
     # Find the thumbnail to delete
@@ -1828,8 +1623,8 @@ def delete_thumbnail(thumbnail_id):
             os.remove(file_path)
         
         # Remove from database
-        from database_helpers import delete_thumbnail_from_db
-        delete_thumbnail_from_db(thumbnail_id)  # ✅ Deletes from database properly
+        thumbnails = [t for t in thumbnails if t['id'] != thumbnail_id]
+        save_thumbnail_database(thumbnails)
         
         flash('Thumbnail deleted successfully!', 'success')
     else:
@@ -1846,7 +1641,6 @@ def serve_thumbnail(filename):
 @app.route('/live-streams')
 @login_required
 def live_streams():
-    """Display live streams - READ FROM DATABASE"""
     streams = get_live_streams()
     videos = get_video_database()
     stream_mapping = get_stream_mapping()
@@ -1862,84 +1656,63 @@ def live_streams():
     # Sort streams by start date (newest first)
     unique_streams.sort(key=lambda x: datetime.strptime(x['start_date'], '%Y-%m-%dT%H:%M'), reverse=True)
     
-    # Add video titles and backward compatibility fields for display
+    # Add video titles to streams for display
     for stream in unique_streams:
-        video_path = os.path.join(VIDEO_FOLDER, stream.get('video_file', ''))
-        stream['video_title'] = get_video_title(stream.get('video_file', ''))
-        
-        # Backward compatibility: map database fields to template fields
-        # server_type → rtmp_server (for template display)
-        if 'server_type' in stream and 'rtmp_server' not in stream:
-            stream['rtmp_server'] = stream['server_type']
-        
-        # stream_url → custom_rtmp (for template display)
-        if 'stream_url' in stream and 'custom_rtmp' not in stream:
-            stream['custom_rtmp'] = stream['stream_url']
-        
-        # Convert repeat_daily to boolean for template
-        if 'repeat_daily' in stream:
-            stream['repeat_daily'] = bool(stream['repeat_daily'])
+        video_path = os.path.join(VIDEO_FOLDER, stream['video_file'])
+        stream['video_title'] = get_video_title(stream['video_file'])
     
+    print(f"Total streams to display: {len(unique_streams)}")
     return render_template('live_streams.html', streams=unique_streams, videos=videos, rtmp_servers=RTMP_SERVERS, stream_mapping=stream_mapping)
 
 @app.route('/edit-live-stream/<stream_id>', methods=['GET', 'POST'])
 @login_required
 @demo_readonly
 def edit_live_stream(stream_id):
-    """Edit live stream - UPDATE DATABASE"""
     role = getattr(current_user, 'role', 'demo')
     if not role_can_add_streams(role):
         flash('Role Anda tidak diizinkan mengedit jadwal (demo-preview).', 'error')
         return redirect(url_for('live_streams'))
+    streams = get_live_streams()
+    videos = get_video_database()
     
-    user_id = int(current_user.id)
-    from database import get_live_stream_by_id, update_live_stream
-    
-    # Get stream from database
-    stream_to_edit = get_live_stream_by_id(stream_id, user_id)
+    # Find the stream to edit
+    stream_to_edit = None
+    for stream in streams:
+        if stream['id'] == stream_id:
+            stream_to_edit = stream
+            break
     
     if not stream_to_edit:
         flash('Jadwal live stream tidak ditemukan')
         return redirect(url_for('live_streams'))
     
     if request.method == 'POST':
-        # Get form data
-        rtmp_server = request.form.get('rtmp_server')
-        custom_rtmp = request.form.get('custom_rtmp', '')
+        if stream_to_edit.get('owner') and stream_to_edit['owner'] != current_user.username and not role_can_manage(role):
+            flash('Tidak dapat mengedit stream milik user lain.', 'error')
+            return redirect(url_for('live_streams'))
+        # Update stream data
+        stream_to_edit['title'] = request.form['title']
+        stream_to_edit['start_date'] = request.form['start_date']
+        stream_to_edit['rtmp_server'] = request.form['rtmp_server']
+        stream_to_edit['stream_key'] = request.form['stream_key']
+        stream_to_edit['duration'] = request.form.get('duration')
         
-        # Prepare updates
-        # Map form fields to database fields:
-        # rtmp_server → server_type
-        # custom_rtmp → stream_url
-        updates = {
-            'title': request.form['title'],
-            'start_date': request.form['start_date'],
-            'server_type': rtmp_server,  # rtmp_server → server_type
-            'stream_key': request.form['stream_key'],
-            'video_file': request.form['video_file'],
-            'duration': int(request.form.get('duration', 0)) if request.form.get('duration') else 0,
-            'stream_url': custom_rtmp if rtmp_server == 'custom' else '',  # custom_rtmp → stream_url
-            'repeat_daily': 1 if 'repeat_daily' in request.form else 0
-        }
+        # Handle custom RTMP
+        if stream_to_edit['rtmp_server'] == 'custom':
+            stream_to_edit['custom_rtmp'] = request.form['custom_rtmp']
         
-        try:
-            update_live_stream(stream_id, user_id, updates)
-            logging.info(f"[LIVE STREAM] Updated: {stream_id} by user {current_user.username}")
-            flash('Jadwal live stream berhasil diperbarui', 'success')
-        except Exception as e:
-            logging.error(f"[LIVE STREAM] Error updating stream: {e}")
-            flash(f'Error: {str(e)}', 'error')
+        # Find video title
+        video_file = request.form['video_file']
+        stream_to_edit['video_file'] = video_file
+        stream_to_edit['video_title'] = get_video_title(video_file)
         
+        # Handle repeat daily option
+        stream_to_edit['repeat_daily'] = 'repeat_daily' in request.form
+        
+        # Save changes
+        save_live_streams(streams)
+        flash('Jadwal live stream berhasil diperbarui')
         return redirect(url_for('live_streams'))
-    
-    # GET request - load form
-    videos = get_video_database()
-    
-    # Add backward compatibility fields for template
-    # server_type → rtmp_server (for template)
-    # stream_url → custom_rtmp (for template)
-    stream_to_edit['rtmp_server'] = stream_to_edit.get('server_type', 'youtube')
-    stream_to_edit['custom_rtmp'] = stream_to_edit.get('stream_url', '')
     
     return render_template('edit_live_stream.html', stream=stream_to_edit, videos=videos, rtmp_servers=RTMP_SERVERS)
 
@@ -1947,22 +1720,11 @@ def edit_live_stream(stream_id):
 @login_required
 @demo_readonly
 def add_live_stream():
-    # Check stream limit before adding
-    from user_limits import can_user_add_stream
-    
-    user_id = int(current_user.id)
-    can_add, message = can_user_add_stream(user_id)
-    if not can_add:
-        flash(f'Cannot add stream: {message}', 'error')
-        return redirect(url_for('live_streams'))
-    
-    # Continue with original logic...
     # Role restriction
     role = getattr(current_user, 'role', 'demo')
     if not role_can_add_streams(role):
         flash('Role Anda tidak diizinkan membuat live/schedule (demo-preview).', 'error')
         return redirect(url_for('live_streams'))
-    # Get form data
     title = request.form.get('title')
     start_date = request.form.get('start_date')
     rtmp_server = request.form.get('rtmp_server')
@@ -1972,38 +1734,46 @@ def add_live_stream():
     repeat_daily = 'repeat_daily' in request.form
     custom_rtmp = request.form.get('custom_rtmp', '')
     
+    # Debug print
+    print(f"Form data: title={title}, start_date={start_date}, rtmp_server={rtmp_server}, stream_key={stream_key}, video_file={video_file}, duration={duration}, repeat_daily={repeat_daily}")
+    
     # Validate inputs
     if not title or not start_date or not rtmp_server or not stream_key or not video_file:
         flash('Semua field harus diisi')
         return redirect(url_for('live_streams'))
     
-    # Prepare data for database
-    # Map form fields to database fields:
-    # rtmp_server → server_type
-    # custom_rtmp → stream_url
-    from database_helpers import add_live_stream_to_db
-    
-    stream_data = {
+    # Create new stream
+    new_stream = {
         'id': str(uuid.uuid4()),
         'title': title,
-        'video_file': video_file,
-        'stream_key': stream_key,
-        'stream_url': custom_rtmp if rtmp_server == 'custom' else '',
-        'server_type': rtmp_server,  # rtmp_server → server_type
-        'status': 'scheduled',
         'start_date': start_date,
-        'duration': int(duration) if duration else 0,
-        'repeat_daily': 1 if repeat_daily else 0
+        'rtmp_server': rtmp_server,
+        'stream_key': stream_key,
+        'video_file': video_file,
+        'duration': duration,
+        'repeat_daily': repeat_daily,
+        'custom_rtmp': custom_rtmp if rtmp_server == 'custom' else '',
+        'status': 'scheduled',
+        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'owner': current_user.username
     }
     
-    try:
-        add_live_stream_to_db(stream_data)
-        logging.info(f"[LIVE STREAM] Added: {title} for user {current_user.username}")
-        flash('Jadwal live stream berhasil ditambahkan', 'success')
-    except Exception as e:
-        logging.error(f"[LIVE STREAM] Error adding stream: {e}")
-        flash(f'Error: {str(e)}', 'error')
+    # Add to streams with role limit check
+    streams = get_live_streams()
+    # Count user's active streams (scheduled or live)
+    user_active = sum(1 for s in streams if s.get('owner') == current_user.username and s.get('status') in ['scheduled', 'live'])
+    max_allowed = role_max_streams(role)
+    if max_allowed is not None and user_active >= max_allowed:
+        flash(f'Melebihi batas video aktif untuk role {role} (maks {max_allowed}).', 'error')
+        return redirect(url_for('live_streams'))
+    streams.append(new_stream)
+    save_live_streams(streams)
     
+    # Debug print
+    print(f"Saved stream: {new_stream}")
+    print(f"Total streams: {len(streams)}")
+    
+    flash('Jadwal live stream berhasil ditambahkan')
     return redirect(url_for('live_streams'))
 
 @app.route('/start-live-stream-now/<stream_id>', methods=['GET', 'POST'])
@@ -2042,41 +1812,71 @@ def start_live_stream_now(stream_id):
 @login_required
 @demo_readonly
 def cancel_live_stream(stream_id):
-    """Cancel/Delete live stream - USE DATABASE"""
-    user_id = int(current_user.id)
+    streams = get_live_streams()
     action = request.args.get('action', 'stop')  # Default action is stop
     
-    # Get stream from database
-    from database import get_live_stream_by_id, delete_live_stream, update_live_stream
-    stream = get_live_stream_by_id(stream_id)
-    
-    if not stream:
-        flash('Live stream tidak ditemukan', 'error')
-        return redirect(url_for('live_streams'))
-    
-    # Check ownership
-    role = getattr(current_user, 'role', 'user')
-    if stream['user_id'] != user_id and not role_can_manage(role):
-        flash('Tidak dapat mengubah stream milik user lain.', 'error')
-        return redirect(url_for('live_streams'))
-    
-    if action == 'delete':
-        # Delete from database
-        if stream['status'] == 'live':
-            stop_ffmpeg_stream(stream_id)
-        
-        if delete_live_stream(stream_id, user_id):
-            flash('Jadwal live stream berhasil dihapus', 'success')
-        else:
-            flash('Gagal menghapus jadwal live stream', 'error')
-    else:  # action == 'stop'
-        if stream['status'] == 'live':
-            stop_ffmpeg_stream(stream_id)
-            # Update status to completed
-            update_live_stream(stream_id, user_id, {'status': 'completed'})
-            flash('Live stream berhasil dihentikan', 'success')
-        else:
-            flash('Live stream tidak sedang berjalan', 'warning')
+    for i, stream in enumerate(streams):
+        if stream['id'] == stream_id:
+            role = getattr(current_user, 'role', 'demo')
+            if stream.get('owner') and stream['owner'] != current_user.username and not role_can_manage(role):
+                flash('Tidak dapat mengubah stream milik user lain.', 'error')
+                return redirect(url_for('live_streams'))
+            if action == 'delete':
+                # Hapus jadwal
+                if stream['status'] == 'live':
+                    # Stop the stream if it's running
+                    stop_ffmpeg_stream(stream_id)
+                
+                # Remove from list
+                streams.pop(i)
+                save_live_streams(streams)
+                flash('Jadwal live stream berhasil dihapus')
+            else:  # action == 'stop'
+                if stream['status'] == 'live':
+                    # Stop the stream if it's running
+                    stop_ffmpeg_stream(stream_id)
+                    # Update status to completed but keep the schedule
+                    stream['status'] = 'completed'
+                    save_live_streams(streams)
+                    
+                    # Update Excel file to increment scheduledStartTime by 1 day
+                    try:
+                        df = pd.read_excel(EXCEL_FILE)
+                        # Assuming 'title' is a unique identifier or you have another way to match
+                        # For now, let's match by title and the original start date to be safe
+                        original_start_date_str = stream['start_date'] # Format YYYY-MM-DDTHH:MM
+                        original_start_date_dt = datetime.strptime(original_start_date_str, '%Y-%m-%dT%H:%M')
+                    
+                        # Find the row in Excel that matches the stream title and a close scheduled start time
+                        # We'll compare dates only for finding the row to avoid issues with slight time differences
+                        matching_rows = df[
+                            (df['title'] == stream['title']) &
+                            (pd.to_datetime(df['scheduledStartTime']).dt.date == original_start_date_dt.date)
+                        ]
+                    
+                        if not matching_rows.empty:
+                            # Take the first match if multiple are found (should ideally be unique)
+                            idx_to_update = matching_rows.index[0]
+                            
+                            # Increment date by 1 day
+                            current_excel_date = pd.to_datetime(df.loc[idx_to_update, 'scheduledStartTime'])
+                            new_excel_date = current_excel_date + timedelta(days=1)
+                            df.loc[idx_to_update, 'scheduledStartTime'] = new_excel_date.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            # Save the updated Excel file
+                            df.to_excel(EXCEL_FILE, index=False)
+                            logging.info(f"✅ Excel updated for '{stream['title']}': New scheduled date {new_excel_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                        else:
+                            logging.warning(f"⚠️ No matching entry found in Excel for stream '{stream['title']}' with original date {original_start_date_dt.date()}")
+                    except Exception as excel_err:
+                        logging.error(f"❌ Error updating Excel file: {excel_err}")
+
+                    # NOTE: Repeat daily logic is handled in stop_ffmpeg_stream() function
+                    # to avoid duplicate schedules (called from both auto-stop and manual stop)
+                    flash('Live stream berhasil dihentikan')
+                    break
+            save_live_streams(streams)
+            break
     
     return redirect(url_for('live_streams'))
 
@@ -2119,98 +1919,49 @@ def admin_users():
                 flash(msg, 'success' if ok else 'error')
         return redirect(url_for('admin_users'))
     users = list_users()
-    
-    # Get user limits data for the limits tab
-    from user_limits import get_all_users_with_limits
-    user_limits = get_all_users_with_limits()
-    
-    return render_template('admin_users_with_limits.html', users=users, user_limits=user_limits)
+    return render_template('admin_users_cyber.html', users=users)
 
 # Route sudah didefinisikan sebelumnya
 
 @app.route('/schedules')
 @login_required
 def schedules():
-    """View schedules page - FROM DATABASE (per-user)"""
     try:
-        user_id = int(current_user.id)
-        
-        # Get schedules from database (user-specific)
-        from database import get_schedules_by_user
-        db_schedules = get_schedules_by_user(user_id)
-        
-        # Convert to format compatible with templates
-        schedules = []
-        for schedule in db_schedules:
-            schedules.append({
-                'id': schedule['id'],
-                'title': schedule['title'],
-                'description': schedule.get('description', ''),
-                'scheduledStartTime': schedule['scheduled_start_time'],
-                'videoFile': schedule.get('video_file', ''),
-                'thumbnail': schedule.get('thumbnail', ''),
-                'thumbnailFile': schedule.get('thumbnail', ''),
-                'streamNameExisting': schedule.get('stream_name', ''),
-                'streamIdExisting': schedule.get('stream_id', ''),
-                'tokenFile': schedule.get('token_file', ''),
-                'token_file': schedule.get('token_file', ''),
-                'privacyStatus': schedule.get('privacy_status', 'unlisted'),
-                'autoStart': bool(schedule.get('auto_start', 0)),
-                'autoStop': bool(schedule.get('auto_stop', 0)),
-                'madeForKids': bool(schedule.get('made_for_kids', 0)),
-                'repeat_daily': bool(schedule.get('repeat_daily', 0)),
-                'success': bool(schedule.get('success', 0)),
-                'broadcastLink': schedule.get('broadcast_link', '')
-            })
-        
+        if os.path.exists(EXCEL_FILE):
+            df = pd.read_excel(EXCEL_FILE)
+            schedules = df.to_dict('records')
+            # Clean up NaN values to avoid template errors
+            for schedule in schedules:
+                for key, value in schedule.items():
+                    if pd.isna(value):
+                        schedule[key] = ''
+        else:
+            # Create empty Excel file with proper columns
+            df = pd.DataFrame(columns=['title', 'scheduledStartTime', 'videoFile', 'thumbnail', 'streamNameExisting', 'streamIdExisting', 'token_file', 'repeat_daily'])
+            df.to_excel(EXCEL_FILE, index=False)
+            schedules = []
     except Exception as e:
         logging.error(f"Error loading schedules: {e}")
         schedules = []
-    
     stream_mapping = get_stream_mapping()
-    # Get list of available tokens (per-user)
-    user_id = int(current_user.id)
-    tokens = get_token_files(user_id)
+    # Get list of available tokens
+    tokens = get_token_files()
     # Get thumbnails
     thumbnails = get_thumbnail_database()
-    
-    # Get scheduler status and config (per-user)
-    role = getattr(current_user, 'role', 'user')
-    scheduler_status = get_scheduler_status()
-    schedule_times = load_schedule_times(user_id=user_id)  # Per-user schedule times
-    is_admin = role_can_manage(role)
-    
-    return render_template('schedules.html', 
-                         schedules=schedules, 
-                         stream_mapping=stream_mapping, 
-                         tokens=tokens, 
-                         thumbnails=thumbnails,
-                         scheduler_status=scheduler_status,
-                         schedule_times=schedule_times,
-                         is_admin=is_admin)
+    return render_template('schedules.html', schedules=schedules, stream_mapping=stream_mapping, tokens=tokens, thumbnails=thumbnails)
 
 @app.route('/add_schedule', methods=['POST'])
 @login_required
 @demo_readonly
 def add_schedule():
-    """Add schedule to database - PER USER"""
-    # Check stream/schedule limit
-    from user_limits import can_user_add_stream
-    
-    user_id = int(current_user.id)
-    can_add, message = can_user_add_stream(user_id)
-    if not can_add:
-        flash(f'Cannot add schedule: {message}', 'error')
-        return redirect(url_for('schedules'))
-    
     # Restrict demo role from adding schedules
     role = getattr(current_user, 'role', 'demo')
     if not role_can_add_streams(role) and not role_can_manage(role):
         flash('Akses ditolak: role demo tidak dapat menambahkan jadwal.', 'error')
         return redirect(url_for('schedules'))
-    
     try:
         data = request.form.to_dict()
+        df = pd.read_excel(EXCEL_FILE) if os.path.exists(EXCEL_FILE) else pd.DataFrame()
         
         # Resolve stream name and log for debugging
         submitted_stream = data.get('streamNameExisting', '')
@@ -2222,32 +1973,29 @@ def add_schedule():
         if thumbnail_file and not thumbnail_file.startswith('thumbnails/'):
             thumbnail_file = f'thumbnails/{thumbnail_file}'
         
-        # Insert into database instead of Excel
-        from database import add_schedule
-        schedule_data = {
+        new_row = {
             'title': data['title'],
-            'description': data.get('description', ''),
-            'scheduled_start_time': data['scheduledStartTime'],
-            'video_file': data.get('videoFile', ''),
-            'thumbnail': thumbnail_file,
-            'stream_name': resolved_stream,
-            'stream_id': data.get('streamIdExisting', ''),
-            'token_file': data['tokenFile'],
-            'repeat_daily': 1 if data.get('repeat_daily') == 'on' else 0,
-            'privacy_status': data.get('privacyStatus', 'unlisted'),
-            'auto_start': 1 if data.get('autoStart') == 'on' else 0,
-            'auto_stop': 1 if data.get('autoStop') == 'on' else 0,
-            'made_for_kids': 1 if data.get('madeForKids') == 'on' else 0,
-            'success': 0
+            'description': data['description'],
+            'scheduledStartTime': data['scheduledStartTime'],
+            'privacyStatus': data.get('privacyStatus', 'unlisted'),
+            'autoStart': data.get('autoStart') == 'on',
+            'autoStop': data.get('autoStop') == 'on',
+            'madeForKids': data.get('madeForKids') == 'on',
+            'tokenFile': data['tokenFile'],
+            'useExistingStream': data.get('useExistingStream') == 'on',
+            'streamNameExisting': resolved_stream,
+            'thumbnailFile': thumbnail_file,
+            'repeat_daily': data.get('repeat_daily') == 'on',
+            'success': False,
+            'streamId': '',
+            'broadcastLink': '',
+            'streamIdExisting': ''
         }
-        
-        add_schedule(user_id, schedule_data)
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        df.to_excel(EXCEL_FILE, index=False)
         flash('Schedule added successfully!', 'success')
-        
     except Exception as e:
-        logging.error(f"Error adding schedule: {e}")
         flash(f'Error: {str(e)}', 'error')
-    
     return redirect(url_for('schedules'))
 
 @app.route('/run_schedule_now/<int:index>', methods=['POST'])
@@ -2255,7 +2003,6 @@ def add_schedule():
 @demo_readonly
 def run_schedule_now(index):
     """Run a single schedule manually (on-demand execution)"""
-    user_id = int(current_user.id)
     try:
         # Read Excel
         df = pd.read_excel(EXCEL_FILE)
@@ -2333,7 +2080,7 @@ def run_schedule_now(index):
             # Format time for display
             display_time = scheduled_start_time if isinstance(scheduled_start_time, str) else str(scheduled_start_time)
             logging.info(f"[TELEGRAM] Sending notification for: {title}")
-            telegram_notifier.notify_schedule_created(title, display_time, broadcast_link, user_id=user_id)
+            telegram_notifier.notify_schedule_created(title, display_time, broadcast_link)
             logging.info(f"[TELEGRAM] Notification sent successfully")
         except Exception as e:
             logging.error(f"[TELEGRAM] Failed to send notification: {e}", exc_info=True)
@@ -2360,7 +2107,7 @@ def run_schedule_now(index):
         
         # Send error notification
         try:
-            telegram_notifier.notify_schedule_error(title if 'title' in locals() else 'Unknown', str(e), user_id=user_id)
+            telegram_notifier.notify_schedule_error(title if 'title' in locals() else 'Unknown', str(e))
         except:
             pass
     
@@ -2369,9 +2116,7 @@ def run_schedule_now(index):
 @app.route('/tokens')
 @login_required
 def tokens():
-    # Get tokens for current user only
-    user_id = int(current_user.id)
-    tokens = get_token_files(user_id)
+    tokens = get_token_files()
     return render_template('tokens.html', tokens=tokens)
 
 @app.route('/create_token', methods=['POST'])
@@ -2455,9 +2200,8 @@ def complete_token():
         flow.fetch_token(code=auth_code)
         creds = flow.credentials
         
-        # Save token to tokens folder (per-user)
-        user_id = int(current_user.id)
-        token_path = get_token_path(token_name, user_id)
+        # Save token to tokens folder
+        token_path = get_token_path(token_name)
         with open(token_path, 'w') as f:
             f.write(creds.to_json())
         
@@ -2485,9 +2229,8 @@ def delete_token():
             flash('Cannot delete client_secret.json', 'error')
             return redirect(url_for('tokens'))
         
-        # Try to delete the token file from tokens folder (per-user)
-        user_id = int(current_user.id)
-        token_path = get_token_path(token_name, user_id)
+        # Try to delete the token file from tokens folder
+        token_path = get_token_path(token_name)
         if os.path.exists(token_path):
             os.remove(token_path)
             
@@ -2550,37 +2293,36 @@ def start_scheduler_thread():
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
 
-# DEPRECATED: Moved to /schedules page (admin section)
-# @app.route('/auto_schedule')
-# @login_required
-# def auto_schedule():
-#     schedule_times = load_schedule_times()
-#     scheduler_status = get_scheduler_status()
-#     return render_template('auto_schedule.html', 
-#                          schedule_times=schedule_times,
-#                          scheduler_status=scheduler_status)
+@app.route('/auto_schedule')
+@login_required
+def auto_schedule():
+    schedule_times = load_schedule_times()
+    scheduler_status = get_scheduler_status()
+    return render_template('auto_schedule.html', 
+                         schedule_times=schedule_times,
+                         scheduler_status=scheduler_status)
 
 @app.route('/update_schedule_times', methods=['POST'])
 @login_required
 def update_schedule_times():
-    """Update schedule times - PER USER"""
-    user_id = int(current_user.id)
+    # Restrict to admin only
+    role = getattr(current_user, 'role', 'demo')
+    if not role_can_manage(role):
+        flash('Akses ditolak: hanya admin yang dapat mengubah Auto Schedule.', 'error')
+        return redirect(url_for('auto_schedule'))
     times = request.form.getlist('times[]')
-    
-    success = save_schedule_times(times, user_id=user_id)
-    
-    if success:
-        flash('Schedule times updated successfully!', 'success')
-    else:
-        flash('Failed to update schedule times.', 'error')
-    
-    return redirect(url_for('schedules'))
+    save_schedule_times(times)
+    flash('Jadwal auto-scheduling berhasil diupdate!', 'success')
+    return redirect(url_for('auto_schedule'))
 
 @app.route('/run_scheduler', methods=['POST'])
 @login_required
 def run_scheduler():
-    """Run scheduler manually - PER USER"""
-    user_id = int(current_user.id)
+    # Restrict to admin only
+    role = getattr(current_user, 'role', 'demo')
+    if not role_can_manage(role):
+        flash('Akses ditolak: hanya admin yang dapat menjalankan scheduler.', 'error')
+        return redirect(url_for('auto_schedule'))
     try:
         import live
         live.main()  # Run scheduler directly
@@ -2604,7 +2346,7 @@ def run_scheduler():
         }
         save_scheduler_status(status)
         flash(f'Error: {str(e)}', 'error')
-    return redirect(url_for('schedules'))
+    return redirect(url_for('auto_schedule'))
 
 # ==== License Management Routes ====
 # Note: Main license_page route is defined earlier in the file (around line 1032)
@@ -2674,8 +2416,12 @@ def get_license_info():
 @app.route('/telegram_settings', methods=['GET', 'POST'])
 @login_required
 def telegram_settings():
-    """Telegram notification settings page - PER USER"""
-    user_id = int(current_user.id)
+    """Telegram notification settings page"""
+    # Check if user has permission
+    role = getattr(current_user, 'role', 'demo')
+    if not role_can_manage(role):
+        flash('Access denied: Only admin can manage Telegram settings.', 'error')
+        return redirect(url_for('index'))
     
     if request.method == 'POST':
         config = {
@@ -2684,19 +2430,22 @@ def telegram_settings():
             'chat_id': request.form.get('chat_id', '').strip()
         }
         
-        telegram_notifier.save_config(config, user_id=user_id)
+        telegram_notifier.save_config(config)
         flash('Telegram settings saved successfully!', 'success')
         return redirect(url_for('telegram_settings'))
     
-    config = telegram_notifier.load_config(user_id=user_id)
+    config = telegram_notifier.load_config()
     return render_template('telegram_settings.html', config=config)
 
 @app.route('/telegram_test', methods=['POST'])
 @login_required
 def telegram_test():
-    """Test Telegram bot connection - PER USER"""
-    user_id = int(current_user.id)
-    success, message = telegram_notifier.test_connection(user_id=user_id)
+    """Test Telegram bot connection"""
+    role = getattr(current_user, 'role', 'demo')
+    if not role_can_manage(role):
+        return jsonify({'success': False, 'message': 'Access denied'}), 403
+    
+    success, message = telegram_notifier.test_connection()
     return jsonify({'success': success, 'message': message})
 
 # ==== New Features: Video Looping, AI Metadata, Bulk Upload ====
@@ -2746,30 +2495,8 @@ def save_bulk_upload_queue(queue):
     """DEPRECATED - use add_bulk_upload_to_db or update_bulk_upload_in_db instead"""
     pass
 
-def load_gemini_config(user_id=None):
-    """Load Gemini API configuration - PER USER"""
-    # Per-user configuration from database
-    if user_id:
-        try:
-            from database import get_db_connection
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT gemini_api_key, gemini_model, gemini_custom_prompt 
-                    FROM users WHERE id = ?
-                ''', (user_id,))
-                row = cursor.fetchone()
-                
-                if row and row['gemini_api_key']:
-                    return {
-                        'api_key': row['gemini_api_key'],
-                        'model': row['gemini_model'] or 'gemini-2.0-flash-exp',
-                        'custom_prompt': row['gemini_custom_prompt']
-                    }
-        except Exception as e:
-            logging.error(f"Error loading Gemini config for user {user_id}: {e}")
-    
-    # Fallback to global config file (legacy)
+def load_gemini_config():
+    """Load Gemini API configuration"""
     config_file = 'gemini_config.json'
     if not os.path.exists(config_file):
         return None
@@ -2818,70 +2545,28 @@ def get_random_metadata(count=1):
     else:
         return random.choices(metadata_list, k=count)
 
-def get_auto_upload_config(user_id=None):
-    """Get auto upload scheduler configuration - PER USER"""
-    # Per-user configuration from database
-    if user_id:
-        try:
-            from database import get_db_connection
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT auto_upload_enabled, auto_upload_offset_hours, 
-                           auto_upload_check_interval 
-                    FROM users WHERE id = ?
-                ''', (user_id,))
-                row = cursor.fetchone()
-                
-                if row:
-                    return {
-                        'enabled': bool(row['auto_upload_enabled']),
-                        'upload_offset_hours': row['auto_upload_offset_hours'] or 2,
-                        'check_interval_minutes': row['auto_upload_check_interval'] or 30
-                    }
-        except Exception as e:
-            logging.error(f"Error loading auto upload config for user {user_id}: {e}")
-    
-    # Fallback to global config file (legacy)
+def get_auto_upload_config():
+    """Get auto upload scheduler configuration"""
     if not os.path.exists(AUTO_UPLOAD_CONFIG_FILE):
-        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 30}
+        default_config = {
+            'enabled': False,
+            'upload_offset_hours': 2,
+            'check_interval_minutes': 5
+        }
+        with open(AUTO_UPLOAD_CONFIG_FILE, 'w') as f:
+            json.dump(default_config, f, indent=4)
+        return default_config
     
     try:
         with open(AUTO_UPLOAD_CONFIG_FILE, 'r') as f:
             return json.load(f)
     except:
-        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 30}
+        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 5}
 
-def save_auto_upload_config(config, user_id=None):
-    """Save auto upload scheduler configuration - PER USER"""
-    # Per-user configuration to database
-    if user_id:
-        try:
-            from database import get_db_connection
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE users 
-                    SET auto_upload_enabled = ?,
-                        auto_upload_offset_hours = ?,
-                        auto_upload_check_interval = ?
-                    WHERE id = ?
-                ''', (
-                    1 if config.get('enabled') else 0,
-                    config.get('upload_offset_hours', 2),
-                    config.get('check_interval_minutes', 30),
-                    user_id
-                ))
-                conn.commit()
-                return True
-        except Exception as e:
-            logging.error(f"Error saving auto upload config for user {user_id}: {e}")
-            return False
-    
-    # Fallback to global config file (legacy)
+def save_auto_upload_config(config):
+    """Save auto upload scheduler configuration"""
     with open(AUTO_UPLOAD_CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
-    return True
 
 @app.route('/video-looping')
 @login_required
@@ -3079,31 +2764,30 @@ def bulk_delete_looped_videos():
 @app.route('/gemini-settings', methods=['GET', 'POST'])
 @login_required
 def gemini_settings():
-    """Gemini API settings page - PER USER"""
-    user_id = int(current_user.id)
+    """Gemini API settings page"""
+    role = getattr(current_user, 'role', 'demo')
+    if not role_can_manage(role):
+        flash('Access denied: Only admin can manage Gemini settings.', 'error')
+        return redirect(url_for('home'))
     
     if request.method == 'POST':
         api_key = request.form.get('api_key', '').strip()
-        model = request.form.get('model', 'gemini-2.0-flash-exp').strip()
+        model = request.form.get('model', 'gemini-2.5-flash').strip()
         custom_prompt = request.form.get('custom_prompt', '').strip()
         
-        # Save to database
-        from database import get_db_connection
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE users 
-                SET gemini_api_key = ?,
-                    gemini_model = ?,
-                    gemini_custom_prompt = ?
-                WHERE id = ?
-            ''', (api_key, model, custom_prompt or None, user_id))
-            conn.commit()
+        config = {
+            'api_key': api_key,
+            'model': model,
+            'custom_prompt': custom_prompt or None
+        }
+        
+        with open('gemini_config.json', 'w') as f:
+            json.dump(config, f, indent=4)
         
         flash('Gemini API settings saved successfully!', 'success')
         return redirect(url_for('gemini_settings'))
     
-    config = load_gemini_config(user_id=user_id) or {}
+    config = load_gemini_config() or {}
     metadata_count = len(get_metadata_from_excel())
     config['metadata_count'] = metadata_count
     return render_template('gemini_settings.html', config=config)
@@ -3116,14 +2800,12 @@ def bulk_scheduling():
     # Only show completed looped videos
     completed_videos = [v for v in looped_videos if v['status'] == 'completed']
     
-    # Get tokens (per-user)
-    user_id = int(current_user.id)
-    tokens = get_token_files(user_id)
+    tokens = get_token_files()
     thumbnails = get_thumbnail_database()
     stream_mapping = get_stream_mapping()
     
-    # Check if Gemini API is configured (per-user)
-    gemini_config = load_gemini_config(user_id=user_id)
+    # Check if Gemini API is configured
+    gemini_config = load_gemini_config()
     gemini_configured = gemini_config and gemini_config.get('api_key')
     
     # Check if metadata Excel exists
@@ -3141,8 +2823,7 @@ def bulk_scheduling():
 @login_required
 @demo_readonly
 def generate_ai_metadata():
-    """Generate metadata using Gemini AI - PER USER"""
-    user_id = int(current_user.id)
+    """Generate metadata using Gemini AI"""
     video_ids = request.form.getlist('video_ids[]')
     keyword = request.form.get('keyword', '').strip()
     
@@ -3152,8 +2833,8 @@ def generate_ai_metadata():
     if not keyword:
         return jsonify({'success': False, 'error': 'Keyword harus diisi'}), 400
     
-    # Load Gemini config (per-user)
-    gemini_config = load_gemini_config(user_id=user_id)
+    # Load Gemini config
+    gemini_config = load_gemini_config()
     if not gemini_config or not gemini_config.get('api_key'):
         return jsonify({'success': False, 'error': 'Gemini API belum dikonfigurasi'}), 400
     
@@ -3193,9 +2874,7 @@ Please provide:
 2. A detailed description (2-3 paragraphs)
 3. 10-15 relevant tags (comma separated)
 
-IMPORTANT: Return ONLY a valid JSON object with no additional text, markdown, or explanations.
-
-Format your response exactly like this:
+Format your response as JSON:
 {{
     "title": "video title here",
     "description": "video description here",
@@ -3207,41 +2886,14 @@ Format your response exactly like this:
             response = model.generate_content(prompt)
             response_text = response.text.strip()
             
-            # Log raw response for debugging
-            logging.info(f"[GEMINI] Raw response for video {idx}: {response_text[:200]}...")
-            
             # Try to parse JSON from response
             # Sometimes Gemini wraps JSON in markdown code blocks
-            json_text = response_text
+            if '```json' in response_text:
+                response_text = response_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in response_text:
+                response_text = response_text.split('```')[1].split('```')[0].strip()
             
-            # Remove markdown code blocks if present
-            if '```json' in json_text:
-                json_text = json_text.split('```json')[1].split('```')[0].strip()
-            elif '```' in json_text:
-                json_text = json_text.split('```')[1].split('```')[0].strip()
-            
-            # Remove any leading/trailing whitespace or special characters
-            json_text = json_text.strip()
-            
-            # Try to find JSON object in response
-            if '{' in json_text and '}' in json_text:
-                # Extract JSON object
-                start_idx = json_text.find('{')
-                end_idx = json_text.rfind('}') + 1
-                json_text = json_text[start_idx:end_idx]
-            
-            try:
-                metadata = json.loads(json_text)
-            except json.JSONDecodeError as je:
-                logging.error(f"[GEMINI] JSON parse error for video {idx}: {je}")
-                logging.error(f"[GEMINI] Attempted to parse: {json_text}")
-                
-                # Fallback: create basic metadata
-                metadata = {
-                    'title': f'{keyword} - Video {idx}',
-                    'description': f'Video about {keyword}. Generated content.',
-                    'tags': keyword
-                }
+            metadata = json.loads(response_text)
             
             generated_metadata.append({
                 'video_id': video_id,
@@ -3328,10 +2980,7 @@ def upload_metadata_excel():
 @login_required
 @demo_readonly
 def save_bulk_upload_queue_route():
-    """Save videos to upload queue with metadata - PER USER"""
-    from database import add_bulk_upload_item, get_looped_videos
-    
-    user_id = int(current_user.id)
+    """Save videos to upload queue with metadata"""
     data = request.get_json()
     
     if not data or not data.get('videos'):
@@ -3352,10 +3001,12 @@ def save_bulk_upload_queue_route():
     except:
         return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
     
-    # Get looped videos database for current user
-    looped_videos = get_looped_videos(user_id)
+    # Get looped videos database
+    looped_videos = get_looped_videos()
     
-    added_count = 0
+    # Create upload queue
+    queue = get_bulk_upload_queue()
+    
     for idx, video_data in enumerate(videos):
         video_id = video_data['video_id']
         video = next((v for v in looped_videos if v['id'] == video_id), None)
@@ -3377,39 +3028,29 @@ def save_bulk_upload_queue_route():
             'stream_id': stream_id,
             'thumbnail_id': thumbnail_id,
             'privacy_status': privacy_status,
-            'status': 'queued'
+            'status': 'queued',
+            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
-        
-        # Add to database
-        add_bulk_upload_item(user_id, queue_entry)
-        added_count += 1
+        queue.append(queue_entry)
     
-    return jsonify({'success': True, 'message': f'{added_count} video ditambahkan ke antrian upload'})
+    save_bulk_upload_queue(queue)
+    
+    return jsonify({'success': True, 'message': f'{len(videos)} video ditambahkan ke antrian upload'})
 
 @app.route('/bulk-upload-queue')
 @login_required
 def bulk_upload_queue_page():
-    """View upload queue - PER USER"""
-    from database import get_bulk_upload_queue
-    
-    user_id = int(current_user.id)
-    queue = get_bulk_upload_queue(user_id)
-    auto_config = get_auto_upload_config(user_id=user_id)
-    scheduler_status = get_auto_upload_scheduler_status()
-    return render_template('bulk_upload_queue.html', 
-                         queue=queue, 
-                         auto_config=auto_config,
-                         scheduler_status=scheduler_status)
+    """View upload queue"""
+    queue = get_bulk_upload_queue()
+    auto_config = get_auto_upload_config()
+    return render_template('bulk_upload_queue.html', queue=queue, auto_config=auto_config)
 
 @app.route('/start-bulk-upload', methods=['POST'])
 @login_required
 @demo_readonly
 def start_bulk_upload():
-    """Start uploading all queued videos to YouTube - PER USER"""
-    from database import get_bulk_upload_queue
-    
-    user_id = int(current_user.id)
-    queue = get_bulk_upload_queue(user_id)
+    """Start uploading all queued videos to YouTube"""
+    queue = get_bulk_upload_queue()
     queued_items = [item for item in queue if item['status'] == 'queued']
     
     if not queued_items:
@@ -3601,35 +3242,24 @@ def api_upload_queue_status():
 @login_required
 @demo_readonly
 def delete_queue_item(item_id):
-    """Delete item from upload queue - PER USER"""
-    from database import delete_bulk_upload_item
+    """Delete item from upload queue"""
+    queue = get_bulk_upload_queue()
+    queue = [item for item in queue if item['id'] != item_id]
+    save_bulk_upload_queue(queue)
     
-    user_id = int(current_user.id)
-    
-    if delete_bulk_upload_item(item_id, user_id):
-        flash('Item berhasil dihapus dari antrian', 'success')
-    else:
-        flash('Item tidak ditemukan', 'error')
-    
+    flash('Item berhasil dihapus dari antrian', 'success')
     return redirect(url_for('bulk_upload_queue_page'))
 
 @app.route('/clear-completed-queue', methods=['POST'])
 @login_required
 @demo_readonly
 def clear_completed_queue():
-    """Clear all completed items from queue - PER USER"""
-    from database import get_bulk_upload_queue, delete_bulk_upload_item
+    """Clear all completed items from queue"""
+    queue = get_bulk_upload_queue()
+    queue = [item for item in queue if item['status'] != 'completed']
+    save_bulk_upload_queue(queue)
     
-    user_id = int(current_user.id)
-    queue = get_bulk_upload_queue(user_id)
-    
-    deleted_count = 0
-    for item in queue:
-        if item['status'] == 'completed':
-            if delete_bulk_upload_item(item['id'], user_id):
-                deleted_count += 1
-    
-    flash(f'{deleted_count} item berhasil dihapus', 'success')
+    flash('Item yang sudah selesai berhasil dihapus', 'success')
     return redirect(url_for('bulk_upload_queue_page'))
 
 @app.route('/requeue-items', methods=['POST'])
@@ -3690,364 +3320,158 @@ def requeue_items():
 
 @app.route('/toggle-auto-upload', methods=['POST'])
 @login_required
+@demo_readonly
 def toggle_auto_upload():
-    """Toggle auto upload scheduler - PER USER"""
-    try:
-        user_id = int(current_user.id)
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
-        
-        config = get_auto_upload_config(user_id=user_id)
-        config['enabled'] = data.get('enabled', False)
-        
-        if 'upload_offset_hours' in data:
-            config['upload_offset_hours'] = int(data['upload_offset_hours'])
-        if 'check_interval_minutes' in data:
-            config['check_interval_minutes'] = int(data['check_interval_minutes'])
-        
-        save_auto_upload_config(config, user_id=user_id)
-        
-        status = 'enabled' if config['enabled'] else 'disabled'
-        return jsonify({
-            'success': True, 
-            'message': f'Auto upload scheduler {status}',
-            'config': config
-        })
-    except Exception as e:
-        logging.error(f"Error toggling auto upload: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+    """Toggle auto upload scheduler"""
+    data = request.get_json()
+    
+    config = get_auto_upload_config()
+    config['enabled'] = data.get('enabled', False)
+    
+    if 'upload_offset_hours' in data:
+        config['upload_offset_hours'] = int(data['upload_offset_hours'])
+    if 'check_interval_minutes' in data:
+        config['check_interval_minutes'] = int(data['check_interval_minutes'])
+    
+    save_auto_upload_config(config)
+    
+    status = 'enabled' if config['enabled'] else 'disabled'
+    return jsonify({
+        'success': True, 
+        'message': f'Auto upload scheduler {status}',
+        'config': config
+    })
 
 # Auto Upload Scheduler Background Thread
 def auto_upload_scheduler():
-    """Background thread that automatically uploads videos based on schedule - PER USER"""
+    """Background thread that automatically uploads videos based on schedule"""
     while True:
         try:
-            from database import get_all_users, get_bulk_upload_queue, update_bulk_upload_item
+            config = get_auto_upload_config()
             
-            # Update status: Running
-            current_time = datetime.now(pytz.timezone(TIMEZONE))
-            scheduler_status = {
-                'last_run': current_time.strftime('%Y-%m-%d %H:%M:%S'),
-                'active': True,
-                'last_status': 'Checking...',
-                'uploads_processed': 0
-            }
-            save_auto_upload_scheduler_status(scheduler_status)
-            
-            # Get all users
-            users = get_all_users()
-            
-            if not users:
-                logging.info("[AUTO-UPLOAD] No users found, sleeping for 5 minutes...")
-                scheduler_status['last_status'] = 'No users found'
-                scheduler_status['next_check'] = (current_time + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S')
-                save_auto_upload_scheduler_status(scheduler_status)
-                time.sleep(300)
+            if not config.get('enabled', False):
+                # Sleep and check again later
+                time.sleep(60)  # Check every minute if scheduler is disabled
                 continue
             
-            any_uploads_pending = False
-            min_check_interval = 30  # Default 30 minutes
-            uploads_processed = 0
+            queue = get_bulk_upload_queue()
+            queued_items = [item for item in queue if item['status'] == 'queued']
             
-            # Loop through each user and check their queue
-            for user in users:
-                user_id = user['id']
-                username = user.get('username', 'unknown')
-                
-                # Get user's auto upload config
-                config = get_auto_upload_config(user_id=user_id)
-                
-                if not config.get('enabled', False):
-                    continue
-                
-                # Update minimum check interval based on user configs
-                user_interval = config.get('check_interval_minutes', 30)
-                if user_interval < min_check_interval:
-                    min_check_interval = user_interval
-                
-                # Get user's upload queue
-                queue = get_bulk_upload_queue(user_id)
-                queued_items = [item for item in queue if item['status'] == 'queued']
-                
-                if not queued_items:
-                    continue
-                
-                any_uploads_pending = True
+            if not queued_items:
+                time.sleep(config.get('check_interval_minutes', 5) * 60)
+                continue
             
-                # Check which videos should be uploaded now
-                now = datetime.now(pytz.timezone(TIMEZONE))
-                upload_offset = timedelta(hours=config.get('upload_offset_hours', 2))
-                
-                for item in queued_items:
-                    try:
-                        # Parse scheduled publish time
-                        scheduled_time = datetime.strptime(item['scheduled_publish_time'], '%Y-%m-%d %H:%M:%S')
-                        scheduled_time = pytz.timezone(TIMEZONE).localize(scheduled_time)
+            # Check which videos should be uploaded now
+            now = datetime.now(pytz.timezone(TIMEZONE))
+            upload_offset = timedelta(hours=config.get('upload_offset_hours', 2))
+            
+            for item in queued_items:
+                try:
+                    # Parse scheduled publish time
+                    scheduled_time = datetime.strptime(item['scheduled_publish_time'], '%Y-%m-%d %H:%M:%S')
+                    scheduled_time = pytz.timezone(TIMEZONE).localize(scheduled_time)
+                    
+                    # Calculate when to upload (X hours before publish time)
+                    upload_time = scheduled_time - upload_offset
+                    
+                    # If upload time has arrived, upload now
+                    if now >= upload_time and item['status'] == 'queued':
+                        logging.info(f"[AUTO-UPLOAD] Starting auto upload for: {item['title']}")
+                        logging.info(f"[AUTO-UPLOAD] Scheduled publish: {item['scheduled_publish_time']}")
                         
-                        # Calculate when to upload (X hours before publish time)
-                        upload_time = scheduled_time - upload_offset
+                        # Upload the video (reuse existing upload logic)
+                        from kunci import get_youtube_service
+                        from googleapiclient.http import MediaFileUpload
                         
-                        # If upload time has arrived, upload now
-                        if now >= upload_time and item['status'] == 'queued':
-                            logging.info(f"[AUTO-UPLOAD][{username}] Starting auto upload for: {item['title']}")
-                            logging.info(f"[AUTO-UPLOAD][{username}] Scheduled publish: {item['scheduled_publish_time']}")
-                            
-                            # Upload the video (reuse existing upload logic)
-                            from kunci import get_youtube_service
-                            from googleapiclient.http import MediaFileUpload
-                            
-                            # Mark as uploading
-                            update_bulk_upload_item(item['id'], user_id, {'status': 'uploading'})
+                        # Mark as uploading
+                        item['status'] = 'uploading'
+                        save_bulk_upload_queue(queue)
                         
-                            # Get token path for per-user tokens
-                            token_path = get_token_path(item['token_file'], user_id)
-                            
-                            # Get YouTube service
-                            youtube = get_youtube_service(token_path)
-                            
-                            # Prepare metadata (same as manual upload)
-                            scheduled_time_dt = datetime.strptime(item['scheduled_publish_time'], '%Y-%m-%d %H:%M:%S')
-                            local_tz = pytz.timezone(TIMEZONE)
-                            utc_tz = pytz.UTC
-                            scheduled_time_local = local_tz.localize(scheduled_time_dt)
-                            scheduled_time_utc = scheduled_time_local.astimezone(utc_tz)
-                            
-                            # Ensure at least 1 hour in future
-                            now_utc = datetime.now(utc_tz)
-                            if scheduled_time_utc <= now_utc + timedelta(hours=1):
-                                scheduled_time_utc = now_utc + timedelta(hours=2)
-                            
-                            body = {
-                                'snippet': {
-                                    'title': item['title'],
-                                    'description': item['description'],
-                                    'tags': item['tags'] if isinstance(item['tags'], list) else item['tags'].split(','),
-                                    'categoryId': '22'
-                                },
-                                'status': {
-                                    'privacyStatus': 'private',
-                                    'publishAt': scheduled_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                                    'selfDeclaredMadeForKids': False
-                                }
+                        # Get YouTube service
+                        youtube = get_youtube_service(item['token_file'])
+                        
+                        # Prepare metadata (same as manual upload)
+                        scheduled_time_dt = datetime.strptime(item['scheduled_publish_time'], '%Y-%m-%d %H:%M:%S')
+                        local_tz = pytz.timezone(TIMEZONE)
+                        utc_tz = pytz.UTC
+                        scheduled_time_local = local_tz.localize(scheduled_time_dt)
+                        scheduled_time_utc = scheduled_time_local.astimezone(utc_tz)
+                        
+                        # Ensure at least 1 hour in future
+                        now_utc = datetime.now(utc_tz)
+                        if scheduled_time_utc <= now_utc + timedelta(hours=1):
+                            scheduled_time_utc = now_utc + timedelta(hours=2)
+                        
+                        body = {
+                            'snippet': {
+                                'title': item['title'],
+                                'description': item['description'],
+                                'tags': item['tags'] if isinstance(item['tags'], list) else item['tags'].split(','),
+                                'categoryId': '22'
+                            },
+                            'status': {
+                                'privacyStatus': 'private',
+                                'publishAt': scheduled_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                                'selfDeclaredMadeForKids': False
                             }
-                            
-                            if item.get('stream_id'):
-                                body['status']['streamId'] = item['stream_id']
-                            
-                            # Upload video
-                            media = MediaFileUpload(item['video_path'], chunksize=-1, resumable=True)
-                            request = youtube.videos().insert(
-                                part='snippet,status',
-                                body=body,
-                                media_body=media
-                            )
-                            
-                            response = None
-                            while response is None:
-                                status, response = request.next_chunk()
-                                if status:
-                                    progress = int(status.progress() * 100)
-                                    update_bulk_upload_item(item['id'], user_id, {'progress': progress})
-                            
-                            video_id = response['id']
+                        }
                         
-                            # Upload thumbnail if specified
-                            if item.get('thumbnail_id'):
-                                from database import get_thumbnails
-                                thumbnails = get_thumbnails(user_id)
-                                thumbnail = next((t for t in thumbnails if t['id'] == item['thumbnail_id']), None)
-                                if thumbnail:
-                                    thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail['filename'])
-                                    if os.path.exists(thumbnail_path):
-                                        youtube.thumbnails().set(
-                                            videoId=video_id,
-                                            media_body=thumbnail_path
-                                        ).execute()
-                            
-                            # Mark as completed
-                            video_url = f'https://studio.youtube.com/video/{video_id}/edit'
-                            update_bulk_upload_item(item['id'], user_id, {
-                                'status': 'completed',
-                                'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                'youtube_video_id': video_id
-                            })
-                            
-                            logging.info(f"[AUTO-UPLOAD][{username}] ✓ Successfully uploaded: {item['title']}")
-                            logging.info(f"[AUTO-UPLOAD][{username}] YouTube Video ID: {video_id}")
-                            uploads_processed += 1
-                            
-                    except Exception as e:
-                        logging.error(f"[AUTO-UPLOAD][{username}] Error uploading {item.get('title', 'Unknown')}: {e}")
-                        update_bulk_upload_item(item['id'], user_id, {
-                            'status': 'failed',
-                            'error_message': str(e)
-                        })
-            
-            # Update status before sleep
-            next_check_time = datetime.now(pytz.timezone(TIMEZONE)) + timedelta(minutes=min_check_interval)
-            scheduler_status['next_check'] = next_check_time.strftime('%Y-%m-%d %H:%M:%S')
-            scheduler_status['uploads_processed'] = uploads_processed
-            
-            if uploads_processed > 0:
-                scheduler_status['last_status'] = f'Success - {uploads_processed} video(s) uploaded'
-            elif any_uploads_pending:
-                scheduler_status['last_status'] = 'Success - No videos ready to upload yet'
-            else:
-                scheduler_status['last_status'] = 'Success - Queue empty'
-            
-            save_auto_upload_scheduler_status(scheduler_status)
+                        if item.get('stream_id'):
+                            body['status']['streamId'] = item['stream_id']
+                        
+                        # Upload video
+                        media = MediaFileUpload(item['video_path'], chunksize=-1, resumable=True)
+                        request = youtube.videos().insert(
+                            part='snippet,status',
+                            body=body,
+                            media_body=media
+                        )
+                        
+                        response = None
+                        while response is None:
+                            status, response = request.next_chunk()
+                            if status:
+                                item['upload_progress'] = int(status.progress() * 100)
+                                save_bulk_upload_queue(queue)
+                        
+                        video_id = response['id']
+                        item['youtube_video_id'] = video_id
+                        
+                        # Upload thumbnail if specified
+                        if item.get('thumbnail_id'):
+                            thumbnails = get_thumbnail_database()
+                            thumbnail = next((t for t in thumbnails if t['id'] == item['thumbnail_id']), None)
+                            if thumbnail:
+                                thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail['filename'])
+                                if os.path.exists(thumbnail_path):
+                                    youtube.thumbnails().set(
+                                        videoId=video_id,
+                                        media_body=thumbnail_path
+                                    ).execute()
+                        
+                        # Mark as completed
+                        item['status'] = 'completed'
+                        item['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        item['video_url'] = f'https://studio.youtube.com/video/{video_id}/edit'
+                        save_bulk_upload_queue(queue)
+                        
+                        logging.info(f"[AUTO-UPLOAD] ✓ Successfully uploaded: {item['title']}")
+                        logging.info(f"[AUTO-UPLOAD] YouTube Video ID: {video_id}")
+                        
+                except Exception as e:
+                    logging.error(f"[AUTO-UPLOAD] Error uploading {item.get('title', 'Unknown')}: {e}")
+                    item['status'] = 'failed'
+                    item['error'] = str(e)
+                    save_bulk_upload_queue(queue)
             
             # Sleep before next check
-            if not any_uploads_pending:
-                logging.info(f"[AUTO-UPLOAD] No pending uploads. Sleeping for {min_check_interval} minutes...")
-            else:
-                logging.info(f"[AUTO-UPLOAD] Sleeping for {min_check_interval} minutes...")
-            
-            time.sleep(min_check_interval * 60)
+            sleep_seconds = config.get('check_interval_minutes', 5) * 60
+            logging.info(f"[AUTO-UPLOAD] Sleeping for {config.get('check_interval_minutes', 5)} minutes...")
+            time.sleep(sleep_seconds)
             
         except Exception as e:
             logging.error(f"[AUTO-UPLOAD] Scheduler error: {e}")
-            
-            # Update status with error
-            error_time = datetime.now(pytz.timezone(TIMEZONE))
-            scheduler_status = {
-                'last_run': error_time.strftime('%Y-%m-%d %H:%M:%S'),
-                'next_check': (error_time + timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S'),
-                'last_status': f'Error: {str(e)}',
-                'active': True,
-                'uploads_processed': 0
-            }
-            save_auto_upload_scheduler_status(scheduler_status)
-            
             time.sleep(60)  # Sleep 1 minute on error
-
-
-# ===== ADMIN USER LIMITS MANAGEMENT =====
-
-# User limits routes removed - now integrated in admin_users page
-
-@app.route('/admin/users/reset_usage', methods=['POST'])
-@login_required
-@require_admin
-def admin_reset_usage():
-    """Reset user usage (delete all data)"""
-    user_id = int(request.form.get('user_id'))
-    
-    try:
-        from database import get_db_connection
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Check if admin
-            cursor.execute('SELECT is_admin FROM users WHERE id = ?', (user_id,))
-            row = cursor.fetchone()
-            if row and row['is_admin']:
-                return jsonify({'success': False, 'message': 'Cannot reset admin user'})
-            
-            # Get files to delete
-            cursor.execute('SELECT filename FROM videos WHERE user_id = ?', (user_id,))
-            videos = cursor.fetchall()
-            
-            cursor.execute('SELECT filename FROM thumbnails WHERE user_id = ?', (user_id,))
-            thumbnails = cursor.fetchall()
-            
-            cursor.execute('SELECT output_filename FROM looped_videos WHERE user_id = ? AND status = "completed"', (user_id,))
-            looped = cursor.fetchall()
-            
-            # Delete files
-            for row in videos:
-                filepath = os.path.join(VIDEO_FOLDER, row['filename'])
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            
-            for row in thumbnails:
-                filepath = os.path.join(THUMBNAIL_FOLDER, row['filename'])
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            
-            looped_folder = os.path.join(VIDEO_FOLDER, 'done')
-            for row in looped:
-                if row['output_filename']:
-                    filepath = os.path.join(looped_folder, row['output_filename'])
-                    if os.path.exists(filepath):
-                        os.remove(filepath)
-            
-            # Delete database records
-            cursor.execute('DELETE FROM videos WHERE user_id = ?', (user_id,))
-            cursor.execute('DELETE FROM thumbnails WHERE user_id = ?', (user_id,))
-            cursor.execute('DELETE FROM looped_videos WHERE user_id = ?', (user_id,))
-            cursor.execute('DELETE FROM bulk_upload_queue WHERE user_id = ?', (user_id,))
-            cursor.execute('DELETE FROM live_streams WHERE user_id = ?', (user_id,))
-            cursor.execute('DELETE FROM schedules WHERE user_id = ?', (user_id,))
-            
-            return jsonify({'success': True, 'message': 'User data reset successfully'})
-    
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-
-
-# ===== CLIENT SECRET MANAGEMENT (PER-USER) =====
-
-@app.route('/settings/youtube-api')
-@login_required
-def client_secret_settings():
-    """YouTube API settings page"""
-    from client_secret_manager import get_client_secret_info, list_user_tokens
-    
-    user_id = int(current_user.id)
-    client_info = get_client_secret_info(user_id)
-    tokens = list_user_tokens(user_id)
-    
-    return render_template('client_secret_settings.html', 
-                         client_info=client_info,
-                         tokens=tokens)
-
-@app.route('/settings/youtube-api/upload', methods=['POST'])
-@login_required
-def upload_client_secret():
-    """Upload client_secret.json for current user"""
-    from client_secret_manager import set_user_client_secret
-    
-    if 'client_secret' not in request.files:
-        flash('No file uploaded', 'error')
-        return redirect(url_for('client_secret_settings'))
-    
-    file = request.files['client_secret']
-    
-    if file.filename == '':
-        flash('No file selected', 'error')
-        return redirect(url_for('client_secret_settings'))
-    
-    if not file.filename.endswith('.json'):
-        flash('File must be a JSON file', 'error')
-        return redirect(url_for('client_secret_settings'))
-    
-    user_id = int(current_user.id)
-    success, message, filepath = set_user_client_secret(user_id, file.read(), file.filename)
-    
-    flash(message, 'success' if success else 'error')
-    return redirect(url_for('client_secret_settings'))
-
-@app.route('/settings/youtube-api/delete', methods=['POST'])
-@login_required
-def delete_client_secret():
-    """Delete client_secret for current user"""
-    from client_secret_manager import delete_user_client_secret
-    
-    user_id = int(current_user.id)
-    success, message = delete_user_client_secret(user_id)
-    
-    return jsonify({'success': success, 'message': message})
-
 
 if __name__ == '__main__':
     # Disable debug mode for production
@@ -4068,6 +3492,6 @@ if __name__ == '__main__':
     auto_scheduler_thread.start()
     logging.info("[AUTO-UPLOAD] Auto upload scheduler thread started")
 
-    # Start Flask with debug mode to show detailed errors
-    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
+    # Start Flask in production mode
+    app.run(debug=False, use_reloader=False, host='0.0.0.0', port=5000)
 

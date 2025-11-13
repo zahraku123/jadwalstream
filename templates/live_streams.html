@@ -89,9 +89,9 @@
                                     <option value="">-- Select Stream Key --</option>
                                     {% for token, streams in stream_mapping.items() %}
                                         {% for stream_id, meta in streams.items() %}
-                                            {% if meta and 'cdn' in meta and 'ingestionInfo' in meta['cdn'] and 'streamName' in meta['cdn']['ingestionInfo'] %}
-                                            <option value="{{ meta['cdn']['ingestionInfo']['streamName'] }}">
-                                                {{ meta['title'] if meta and 'title' in meta else stream_id }} - {{ token }}
+                                            {% if meta and meta.get('stream_key') %}
+                                            <option value="{{ meta['stream_key'] }}">
+                                                {{ meta.get('stream_name', meta.get('title', stream_id)) }} - {{ token }}
                                             </option>
                                             {% endif %}
                                         {% endfor %}

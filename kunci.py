@@ -6,16 +6,26 @@ import os
 # Configuration
 TOKENS_FOLDER = 'tokens'  # Folder for token files
 
-def get_youtube_service(token_file):
-    """Membuat service YouTube API dengan token yang diberikan"""
-    # Construct full path to token file in tokens folder
-    token_path = os.path.join(TOKENS_FOLDER, token_file)
+def get_youtube_service(token_path):
+    """Membuat service YouTube API dengan token yang diberikan
+    
+    Args:
+        token_path: Full path to token file (not just filename)
+    """
+    # If token_path is just filename (legacy support), add tokens folder
+    if not os.path.dirname(token_path):
+        token_path = os.path.join(TOKENS_FOLDER, token_path)
+    
     creds = Credentials.from_authorized_user_file(token_path, ['https://www.googleapis.com/auth/youtube'])
     return build('youtube', 'v3', credentials=creds)
 
-def get_stream_keys(token_file):
-    """Mengambil semua stream keys dari channel"""
-    youtube = get_youtube_service(token_file)
+def get_stream_keys(token_path):
+    """Mengambil semua stream keys dari channel
+    
+    Args:
+        token_path: Full path to token file (not just filename)
+    """
+    youtube = get_youtube_service(token_path)
     
     try:
         # Mengambil daftar livestreams

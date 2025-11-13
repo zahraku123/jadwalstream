@@ -20,6 +20,88 @@
         </button>
     </div>
 
+    <!-- Scheduler Configuration Section (All Users) -->
+    <div class="glass-panel rounded-xl p-6 border border-cyan-500/20 mb-6" x-data="schedulerConfig()">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-white font-mono flex items-center">
+                <i class="fas fa-robot text-cyan-400 mr-3"></i>
+                AUTO <span class="text-purple-400 ml-2">SCHEDULER</span>
+            </h3>
+            <span class="{% if scheduler_status.active %}badge-cyber green animate-pulse{% else %}badge-cyber gray{% endif %}">
+                {% if scheduler_status.active %}ACTIVE{% else %}INACTIVE{% endif %}
+            </span>
+        </div>
+        
+        <!-- Status Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Last Run</div>
+                <div class="text-sm text-white font-mono">{{ scheduler_status.last_run or 'Never' }}</div>
+            </div>
+            <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Next Check</div>
+                <div class="text-sm text-cyan-400 font-mono">{{ scheduler_status.next_check or '-' }}</div>
+            </div>
+            <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Last Status</div>
+                <div class="text-sm {% if 'Error' in scheduler_status.last_status %}text-red-400{% else %}text-green-400{% endif %}">
+                    {{ scheduler_status.last_status }}
+                </div>
+            </div>
+            <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                <div class="text-xs text-slate-400 mb-1 uppercase tracking-wider">My Schedule Times</div>
+                <div class="text-sm text-white">{{ schedule_times|length }} time(s)</div>
+            </div>
+        </div>
+        
+        <!-- Schedule Times Configuration -->
+        <div class="bg-slate-800/30 rounded-lg p-4 border border-slate-700/30 mb-4">
+            <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-bold text-slate-300 uppercase tracking-wider">
+                    <i class="fas fa-clock mr-2"></i>My Schedule Times
+                </h4>
+                <button @click="addTime()" class="cyber-btn primary text-xs py-1 px-3">
+                    <i class="fas fa-plus mr-1"></i>Add Time
+                </button>
+            </div>
+            
+            <form action="{{ url_for('update_schedule_times') }}" method="POST" id="schedulerForm">
+                <div id="timesList" class="space-y-2 mb-3">
+                    {% for time in schedule_times %}
+                    <div class="flex items-center gap-2">
+                        <input type="time" name="times[]" value="{{ time }}" required 
+                               class="flex-1 cyber-input text-sm">
+                        <button type="button" @click="removeTime($event.target)" 
+                                class="cyber-btn danger text-xs py-2 px-3">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    {% endfor %}
+                    {% if not schedule_times %}
+                    <p class="text-slate-400 text-sm italic">No schedule times configured. Click "Add Time" to create one.</p>
+                    {% endif %}
+                </div>
+                
+                <button type="submit" class="cyber-btn success w-full">
+                    <i class="fas fa-save mr-2"></i>
+                    Save Schedule Times
+                </button>
+            </form>
+        </div>
+        
+        <!-- Manual Control -->
+        {% if is_admin %}
+        <div class="flex gap-2">
+            <form action="{{ url_for('run_scheduler') }}" method="POST" class="flex-1">
+                <button type="submit" class="cyber-btn warning w-full">
+                    <i class="fas fa-play mr-2"></i>
+                    Run Scheduler Now (Admin)
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Add Schedule Form (Hidden by default) -->
     <div x-show="showAddForm" 
          x-collapse
@@ -120,7 +202,7 @@
                             <h4 class="text-sm font-bold text-green-400 mb-3 font-mono uppercase tracking-wider flex items-center">
                                 <i class="fas fa-cog mr-2"></i>Additional Settings
                             </h4>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                                 <div class="flex items-center">
                                     <input type="checkbox" name="autoStart" id="autoStart"
                                            class="w-4 h-4 text-green-500 border-green-500/30 bg-dark-card rounded focus:ring-green-500">
@@ -135,6 +217,11 @@
                                     <input type="checkbox" name="madeForKids" id="madeForKids"
                                            class="w-4 h-4 text-cyan-500 border-cyan-500/30 bg-dark-card rounded focus:ring-cyan-500">
                                     <label for="madeForKids" class="ml-2 text-sm text-slate-300">Made for Kids</label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="checkbox" name="repeat_daily" id="repeat_daily"
+                                           class="w-4 h-4 text-purple-500 border-purple-500/30 bg-dark-card rounded focus:ring-purple-500">
+                                    <label for="repeat_daily" class="ml-2 text-sm text-slate-300">Repeat Daily</label>
                                 </div>
                             </div>
                             
@@ -234,6 +321,9 @@
                     {% if schedule.madeForKids %}
                     <span class="badge-cyber cyan">KIDS</span>
                     {% endif %}
+                    {% if schedule.repeat_daily %}
+                    <span class="badge-cyber purple">REPEAT DAILY</span>
+                    {% endif %}
                 </div>
 
                 <!-- Actions -->
@@ -244,11 +334,11 @@
                         <i class="fab fa-youtube mr-1"></i> View
                     </a>
                     {% endif %}
-                    <a href="{{ url_for('edit_schedule', index=loop.index0) }}" 
+                    <a href="{{ url_for('edit_schedule', index=schedule.id) }}" 
                        class="cyber-btn-sm secondary">
                         <i class="fas fa-edit"></i>
                     </a>
-                    <button @click="deleteIndex = {{ loop.index0 }}"
+                    <button @click="deleteIndex = {{ schedule.id }}"
                             class="cyber-btn-sm danger">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -320,9 +410,11 @@ function getAllStreams(mapping) {
     for (const [token, streams] of Object.entries(mapping)) {
         if (streams && typeof streams === 'object') {
             Object.entries(streams).forEach(([id, meta]) => {
-                if (meta && meta.title) {
+                // Support both old format (meta.title) and new format (meta.stream_name)
+                const streamTitle = meta && (meta.stream_name || meta.title);
+                if (streamTitle) {
                     allStreams[id] = {
-                        title: meta.title,
+                        title: streamTitle,
                         token: token
                     };
                 }
@@ -414,5 +506,48 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Scheduler configuration management
+function schedulerConfig() {
+    return {
+        addTime() {
+            const timesList = document.getElementById('timesList');
+            const newTimeDiv = document.createElement('div');
+            newTimeDiv.className = 'flex items-center gap-2';
+            newTimeDiv.innerHTML = `
+                <input type="time" name="times[]" required class="flex-1 cyber-input text-sm">
+                <button type="button" class="cyber-btn danger text-xs py-2 px-3">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            
+            // Remove "no times" message if it exists
+            const noTimesMsg = timesList.querySelector('p.italic');
+            if (noTimesMsg) {
+                noTimesMsg.remove();
+            }
+            
+            timesList.appendChild(newTimeDiv);
+            
+            // Add event listener to the new remove button
+            newTimeDiv.querySelector('button').addEventListener('click', (e) => {
+                this.removeTime(e.target);
+            });
+        },
+        
+        removeTime(btn) {
+            const timeDiv = btn.closest('div.flex');
+            if (timeDiv) {
+                timeDiv.remove();
+                
+                // If no times left, show message
+                const timesList = document.getElementById('timesList');
+                if (timesList.children.length === 0) {
+                    timesList.innerHTML = '<p class="text-slate-400 text-sm italic">No schedule times configured. Click "Add Time" to create one.</p>';
+                }
+            }
+        }
+    };
+}
 </script>
 {% endblock %}

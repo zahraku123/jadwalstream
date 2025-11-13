@@ -11,7 +11,7 @@ from database import (
 )
 
 class User(UserMixin):
-    def __init__(self, id, username, password_hash, role='user'):
+    def __init__(self, id, username, password_hash, role='demo'):
         self.id = str(id)  # Flask-Login requires string ID
         self.username = username
         self.password_hash = password_hash
@@ -25,7 +25,7 @@ def get_user_by_username(username):
             user_data['id'],
             user_data['username'],
             user_data['password_hash'],
-            user_data.get('role', 'user')
+            user_data.get('role', 'demo')
         )
     return None
 
@@ -42,11 +42,11 @@ def get_user_by_id(user_id):
             user_data['id'],
             user_data['username'],
             user_data['password_hash'],
-            user_data.get('role', 'user')
+            user_data.get('role', 'demo')
         )
     return None
 
-def create_user(username, password, role='user'):
+def create_user(username, password, role='demo'):
     """Create a new user with role"""
     # Check if user already exists
     if get_user_by_username(username):
@@ -70,7 +70,7 @@ def authenticate_user(username, password):
             user_data['id'],
             user_data['username'],
             user_data['password_hash'],
-            user_data.get('role', 'user')
+            user_data.get('role', 'demo')
         )
     return None
 
@@ -127,10 +127,10 @@ def initialize_default_user():
         else:
             print(f"Failed to create default admin user: {msg}")
     
-    # Create demo user if it doesn't exist (now with 'user' role)
+    # Also create demo user if it doesn't exist
     if 'demo' not in users_dict:
-        create_user('demo', 'demo123', role='user')
-        print("Default demo user created: username='demo', password='demo123' (role=user)")
+        create_user('demo', 'demo123', role='demo')
+        print("Default demo user created: username='demo', password='demo123' (role=demo)")
 
 def delete_user(username):
     """Delete a user"""

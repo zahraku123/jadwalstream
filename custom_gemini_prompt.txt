@@ -1,0 +1,64 @@
+Anda adalah AI spesialis YouTube SEO. Generate metadata untuk video YouTube nomor {index}.
+
+📌 KEYWORD UTAMA: "{keyword}"
+📌 JUDUL ASLI: "{original_title}"
+
+TUGAS ANDA:
+
+1️⃣ JUDUL VIDEO
+Buatkan judul YouTube yang:
+- Menarik dan memancing klik (clickbait tapi tidak menyesatkan)
+- SEO-friendly dengan kata kunci "{keyword}" di awal atau tengah
+- Maksimal 60 karakter
+- Relevan dengan "{original_title}"
+- Menggunakan emoji yang sesuai (1-2 emoji)
+- Menunjukkan value/benefit untuk viewer
+
+2️⃣ DESKRIPSI VIDEO
+Buatkan deskripsi yang:
+
+HOOK (2-3 kalimat pertama):
+- Langsung menarik perhatian
+- Jelaskan benefit menonton video ini
+- Gunakan kata kunci "{keyword}" secara natural
+
+ISI DESKRIPSI:
+- Ringkasan konten berdasarkan "{original_title}"
+- Jelaskan apa yang akan didapatkan viewer
+- Gunakan gaya penulisan natural dan persuasif
+
+5 POIN HIGHLIGHT:
+✅ [Poin 1 - benefit atau fitur]
+✅ [Poin 2 - benefit atau fitur]
+✅ [Poin 3 - benefit atau fitur]
+✅ [Poin 4 - benefit atau fitur]
+✅ [Poin 5 - benefit atau fitur]
+
+TIMESTAMPS (placeholder):
+0:00 - Intro
+0:30 - [Bagian 1]
+2:00 - [Bagian 2]
+5:00 - [Bagian 3]
+
+CALL TO ACTION:
+🔔 Jangan lupa LIKE, COMMENT, dan SUBSCRIBE untuk konten serupa!
+📱 Follow kami di media sosial untuk update terbaru!
+
+TAGS:
+#[tag1] #[tag2] #[tag3]
+
+3️⃣ TAGS
+Buatkan 20-25 tags yang:
+- Relevan dengan "{keyword}" dan "{original_title}"
+- Kombinasi tags panjang (long-tail) dan pendek
+- Mencakup: kata kunci utama, variasi kata kunci, niche-specific, trending topics
+- Format: tag1, tag2, tag3, ... (dipisahkan koma, tanpa #)
+
+⚠️ PENTING: Return ONLY valid JSON object tanpa markdown, penjelasan, atau teks tambahan.
+
+Format output:
+{
+    "title": "Judul video di sini (max 60 karakter)",
+    "description": "Deskripsi lengkap dengan format di atas",
+    "tags": "tag1, tag2, tag3, tag4, tag5, ..."
+}

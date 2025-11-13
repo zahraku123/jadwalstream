@@ -45,7 +45,7 @@
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {% for stream_id, meta in streams.items() %}
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{{ meta['title'] if meta and 'title' in meta else stream_id }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{{ (meta['stream_name'] if meta and 'stream_name' in meta else (meta['title'] if meta and 'title' in meta else stream_id)) }}</td>
                             <td class="px-4 py-3 text-sm"><code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs text-gray-800 dark:text-gray-200">{{ stream_id }}</code></td>
                             <td class="px-4 py-3 text-sm">
                                 <form method="POST" action="{{ url_for('delete_stream_mapping') }}">

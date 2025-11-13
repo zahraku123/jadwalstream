@@ -1,7 +1,6 @@
 """
-Telegram Notification Module - Per-User Support
+Telegram Notification Module
 Sends notifications to Telegram for schedule events
-Now supports per-user bot configuration!
 """
 
 import requests
@@ -13,130 +12,52 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Configuration file (fallback for legacy)
+# Configuration file
 CONFIG_FILE = 'telegram_config.json'
 
-def get_db_connection():
-    """Get database connection"""
-    import sqlite3
-    conn = sqlite3.connect('jadwalstream.db')
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def load_config(user_id=None):
-    """
-    Load Telegram configuration for specific user or global
-    
-    Args:
-        user_id (int, optional): User ID for per-user config
-    
-    Returns:
-        dict: Configuration with bot_token, chat_id, enabled
-    """
-    # Per-user configuration from database
-    if user_id:
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT telegram_bot_token, telegram_chat_id, telegram_enabled 
-                    FROM users WHERE id = ?
-                ''', (user_id,))
-                row = cursor.fetchone()
-                
-                if row:
-                    return {
-                        'bot_token': row['telegram_bot_token'] or '',
-                        'chat_id': row['telegram_chat_id'] or '',
-                        'enabled': bool(row['telegram_enabled'])
-                    }
-        except Exception as e:
-            logging.error(f"[TELEGRAM] Error loading config for user {user_id}: {e}")
-    
-    # Fallback to global configuration file (legacy)
+def load_config():
+    """Load Telegram configuration from file"""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r') as f:
                 return json.load(f)
         except:
             pass
-    
     return {
         'enabled': False,
         'bot_token': '',
         'chat_id': ''
     }
 
-def save_config(config, user_id=None):
-    """
-    Save Telegram configuration for specific user or global
-    
-    Args:
-        config (dict): Configuration to save
-        user_id (int, optional): User ID for per-user config
-    """
-    # Per-user configuration to database
-    if user_id:
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE users 
-                    SET telegram_bot_token = ?,
-                        telegram_chat_id = ?,
-                        telegram_enabled = ?
-                    WHERE id = ?
-                ''', (
-                    config.get('bot_token', ''),
-                    config.get('chat_id', ''),
-                    1 if config.get('enabled') else 0,
-                    user_id
-                ))
-                conn.commit()
-                logging.info(f"[TELEGRAM] Config saved for user {user_id}")
-                return True
-        except Exception as e:
-            logging.error(f"[TELEGRAM] Error saving config for user {user_id}: {e}")
-            return False
-    
-    # Fallback to global config file (legacy)
+def save_config(config):
+    """Save Telegram configuration to file"""
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
-    return True
 
-def is_enabled(user_id=None):
-    """
-    Check if Telegram notifications are enabled for user
-    
-    Args:
-        user_id (int, optional): User ID to check
-    
-    Returns:
-        bool: True if enabled and configured
-    """
-    config = load_config(user_id)
+def is_enabled():
+    """Check if Telegram notifications are enabled"""
+    config = load_config()
     enabled = config.get('enabled', False)
     has_token = bool(config.get('bot_token', '').strip())
     has_chat_id = bool(config.get('chat_id', '').strip())
     return enabled and has_token and has_chat_id
 
-def send_message(message, parse_mode='HTML', user_id=None):
+def send_message(message, parse_mode='HTML'):
     """
     Send a message to Telegram
     
     Args:
         message (str): Message to send
         parse_mode (str): Parse mode (HTML or Markdown)
-        user_id (int, optional): User ID for per-user bot
     
     Returns:
         bool: True if successful, False otherwise
     """
-    if not is_enabled(user_id):
-        logging.warning(f"[TELEGRAM] Notifications disabled or not configured for user {user_id}")
+    if not is_enabled():
+        logging.warning("[TELEGRAM] Notifications are disabled or not configured")
         return False
     
-    config = load_config(user_id)
+    config = load_config()
     bot_token = config['bot_token']
     chat_id = config['chat_id']
     
@@ -149,21 +70,20 @@ def send_message(message, parse_mode='HTML', user_id=None):
     }
     
     try:
-        user_info = f" (user_id: {user_id})" if user_id else " (global)"
-        logging.info(f"[TELEGRAM] Sending message to chat_id: {chat_id}{user_info}")
+        logging.info(f"[TELEGRAM] Sending message to chat_id: {chat_id}")
         response = requests.post(url, json=payload, timeout=10)
         
         if response.status_code == 200:
-            logging.info(f"[TELEGRAM] Message sent successfully{user_info}")
+            logging.info("[TELEGRAM] Message sent successfully")
             return True
         else:
-            logging.error(f"[TELEGRAM] Failed to send message{user_info}. Status: {response.status_code}, Response: {response.text}")
+            logging.error(f"[TELEGRAM] Failed to send message. Status: {response.status_code}, Response: {response.text}")
             return False
     except Exception as e:
         logging.error(f"[TELEGRAM] Error sending message: {e}", exc_info=True)
         return False
 
-def notify_schedule_created(title, scheduled_time, broadcast_link, user_id=None):
+def notify_schedule_created(title, scheduled_time, broadcast_link):
     """
     Notify when a schedule is successfully created
     
@@ -171,9 +91,8 @@ def notify_schedule_created(title, scheduled_time, broadcast_link, user_id=None)
         title (str): Schedule title
         scheduled_time (str): Scheduled start time
         broadcast_link (str): YouTube studio link
-        user_id (int, optional): User ID for notification
     """
-    logging.info(f"[TELEGRAM] Preparing schedule created notification for: {title} (user_id: {user_id})")
+    logging.info(f"[TELEGRAM] Preparing schedule created notification for: {title}")
     message = f"""
 🎬 <b>Schedule Created Successfully!</b>
 
@@ -183,11 +102,11 @@ def notify_schedule_created(title, scheduled_time, broadcast_link, user_id=None)
 
 ✅ Your stream is ready to go live!
 """
-    result = send_message(message.strip(), user_id=user_id)
+    result = send_message(message.strip())
     logging.info(f"[TELEGRAM] Notification result: {result}")
     return result
 
-def notify_stream_starting(title, scheduled_time, broadcast_link, user_id=None):
+def notify_stream_starting(title, scheduled_time, broadcast_link):
     """
     Notify when a stream is about to start
     
@@ -195,7 +114,6 @@ def notify_stream_starting(title, scheduled_time, broadcast_link, user_id=None):
         title (str): Stream title
         scheduled_time (str): Scheduled start time
         broadcast_link (str): YouTube studio link
-        user_id (int, optional): User ID for notification
     """
     message = f"""
 🚀 <b>Stream Starting Now!</b>
@@ -206,16 +124,15 @@ def notify_stream_starting(title, scheduled_time, broadcast_link, user_id=None):
 
 🎥 Your livestream is going live!
 """
-    return send_message(message.strip(), user_id=user_id)
+    return send_message(message.strip())
 
-def notify_stream_ended(title, duration=None, user_id=None):
+def notify_stream_ended(title, duration=None):
     """
     Notify when a stream has ended
     
     Args:
         title (str): Stream title
         duration (str, optional): Stream duration
-        user_id (int, optional): User ID for notification
     """
     duration_text = f"\n⏱ <b>Duration:</b> {duration}" if duration else ""
     
@@ -226,16 +143,15 @@ def notify_stream_ended(title, duration=None, user_id=None):
 
 ✅ Stream completed successfully!
 """
-    return send_message(message.strip(), user_id=user_id)
+    return send_message(message.strip())
 
-def notify_schedule_error(title, error_message, user_id=None):
+def notify_schedule_error(title, error_message):
     """
     Notify when there's an error creating a schedule
     
     Args:
         title (str): Schedule title
         error_message (str): Error message
-        user_id (int, optional): User ID for notification
     """
     message = f"""
 ❌ <b>Schedule Creation Failed</b>
@@ -245,9 +161,9 @@ def notify_schedule_error(title, error_message, user_id=None):
 
 Please check the application logs for details.
 """
-    return send_message(message.strip(), user_id=user_id)
+    return send_message(message.strip())
 
-def notify_daily_summary(total_schedules, successful, failed, user_id=None):
+def notify_daily_summary(total_schedules, successful, failed):
     """
     Send daily summary of schedules
     
@@ -255,7 +171,6 @@ def notify_daily_summary(total_schedules, successful, failed, user_id=None):
         total_schedules (int): Total schedules processed
         successful (int): Successful schedules
         failed (int): Failed schedules
-        user_id (int, optional): User ID for notification
     """
     message = f"""
 📊 <b>Daily Schedule Summary</b>
@@ -269,22 +184,19 @@ def notify_daily_summary(total_schedules, successful, failed, user_id=None):
 
 Keep up the great work! 🎉
 """
-    return send_message(message.strip(), user_id=user_id)
+    return send_message(message.strip())
 
-def test_connection(user_id=None):
+def test_connection():
     """
     Test Telegram bot connection
-    
-    Args:
-        user_id (int, optional): User ID to test
     
     Returns:
         tuple: (success: bool, message: str)
     """
-    if not is_enabled(user_id):
+    if not is_enabled():
         return False, "Telegram notifications are not configured or disabled"
     
-    config = load_config(user_id)
+    config = load_config()
     bot_token = config['bot_token']
     
     # Test getMe endpoint
@@ -306,7 +218,7 @@ def test_connection(user_id=None):
 
 Your notifications are working correctly!
 """
-            if send_message(test_msg.strip(), user_id=user_id):
+            if send_message(test_msg.strip()):
                 return True, f"Successfully connected to bot @{bot_name}"
             else:
                 return False, "Failed to send test message. Check chat_id."
@@ -322,10 +234,5 @@ Your notifications are working correctly!
 if __name__ == '__main__':
     # Test the module
     print("Testing Telegram notification module...")
-    print("\nTesting global config:")
     success, message = test_connection()
-    print(f"Result: {message}")
-    
-    print("\nTesting user_id=1 (admin):")
-    success, message = test_connection(user_id=1)
     print(f"Result: {message}")

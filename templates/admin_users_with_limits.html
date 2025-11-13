@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block title %}User Management{% endblock %}
+
+{% block content %}
+<div x-data="{ 
+    activeTab: 'users',
+    deleteUser: null, 
+    changePasswordUser: null, 
+    newPassword: '',
+    editLimitsUser: null,
+    editMaxStreams: 0,
+    editMaxStorage: 0
+}">
+    <!-- Cyber Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-white font-mono flex items-center">
+            <i class="fas fa-users-cog text-purple-400 mr-3"></i>
+            <span class="text-cyan-400">USER</span> MANAGEMENT
+        </h1>
+        <p class="text-slate-400 text-sm mt-1 font-mono">Manage users and their limits</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="mb-6">
+        <div class="border-b border-gray-700">
+            <nav class="flex space-x-4">
+                <button 
+                    @click="activeTab = 'users'"
+                    :class="activeTab === 'users' ? 'border-cyan-400 text-cyan-400' : 'border-transparent text-gray-400 hover:text-white'"
+                    class="py-3 px-4 border-b-2 font-medium text-sm transition-colors">
+                    <i class="fas fa-users mr-2"></i>Users
+                </button>
+                <button 
+                    @click="activeTab = 'limits'"
+                    :class="activeTab === 'limits' ? 'border-purple-400 text-purple-400' : 'border-transparent text-gray-400 hover:text-white'"
+                    class="py-3 px-4 border-b-2 font-medium text-sm transition-colors">
+                    <i class="fas fa-sliders-h mr-2"></i>User Limits
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Tab Content: Users -->
+    <div x-show="activeTab === 'users'" x-cloak class="space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Form Tambah User -->
+            <div class="cyber-card">
+                <div class="cyber-card-header bg-gradient-to-r from-green-600 to-green-800">
+                    <h3 class="text-lg font-semibold font-mono flex items-center">
+                        <i class="fas fa-user-plus mr-2"></i> ADD NEW USER
+                    </h3>
+                </div>
+                <div class="cyber-card-body">
+                    <form action="{{ url_for('admin_users') }}" method="POST" class="space-y-4">
+                        <input type="hidden" name="action" value="create">
+                        
+                        <div class="cyber-input-group">
+                            <label class="cyber-label">
+                                <i class="fas fa-user mr-2"></i>Username
+                            </label>
+                            <input type="text" name="username" required class="cyber-input" placeholder="Enter username...">
+                        </div>
+                        
+                        <div class="cyber-input-group">
+                            <label class="cyber-label">
+                                <i class="fas fa-lock mr-2"></i>Password
+                            </label>
+                            <input type="password" name="password" required class="cyber-input" placeholder="Enter password...">
+                        </div>
+                        
+                        <div class="cyber-input-group">
+                            <label class="cyber-label">
+                                <i class="fas fa-stream mr-2"></i>Max Streams
+                            </label>
+                            <input type="number" name="max_streams" value="3" min="0" class="cyber-input">
+                            <p class="text-xs text-gray-500 mt-1">Total live streams + schedules allowed</p>
+                        </div>
+                        
+                        <div class="cyber-input-group">
+                            <label class="cyber-label">
+                                <i class="fas fa-hdd mr-2"></i>Max Storage (MB)
+                            </label>
+                            <input type="number" name="max_storage_mb" value="2000" min="0" class="cyber-input">
+                            <p class="text-xs text-gray-500 mt-1">
+                                Quick: <span class="text-cyan-400">1000</span>=1GB | 
+                                <span class="text-cyan-400">5000</span>=5GB | 
+                                <span class="text-cyan-400">10000</span>=10GB
+                            </p>
+                        </div>
+                        
+                        <button type="submit" class="cyber-btn success w-full">
+                            <i class="fas fa-user-plus mr-2"></i> CREATE USER
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- List User -->
+            <div class="cyber-card">
+                <div class="cyber-card-header bg-gradient-to-r from-cyan-600 to-cyan-800">
+                    <h3 class="text-lg font-semibold font-mono flex items-center">
+                        <i class="fas fa-list mr-2"></i> USER LIST
+                    </h3>
+                </div>
+                <div class="cyber-card-body">
+                    <div class="overflow-x-auto cyber-table-container">
+                        <table class="cyber-table">
+                            <thead>
+                                <tr>
+                                    <th><i class="fas fa-user mr-2"></i>USER</th>
+                                    <th><i class="fas fa-chart-bar mr-2"></i>USAGE</th>
+                                    <th><i class="fas fa-tools mr-2"></i>ACTIONS</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for username, data in users.items() %}
+                                <tr>
+                                    <td>
+                                        <div class="flex items-center">
+                                            {% if data.role == 'admin' %}
+                                                <i class="fas fa-crown text-yellow-400 mr-2"></i>
+                                            {% else %}
+                                                <i class="fas fa-user text-cyan-400 mr-2"></i>
+                                            {% endif %}
+                                            <span class="font-mono">{{ username }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if data.role != 'admin' %}
+                                            <button 
+                                                @click="activeTab = 'limits'"
+                                                class="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-500 rounded">
+                                                View Usage
+                                            </button>
+                                        {% else %}
+                                            <span class="text-xs text-yellow-400">Unlimited</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="flex space-x-2">
+                                            {% if username != 'admin' %}
+                                                <button 
+                                                    @click="changePasswordUser = '{{ username }}'; newPassword = ''"
+                                                    class="cyber-btn small warning">
+                                                    <i class="fas fa-key"></i>
+                                                </button>
+                                                <button 
+                                                    @click="deleteUser = '{{ username }}'"
+                                                    class="cyber-btn small danger">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            {% else %}
+                                                <span class="text-xs text-gray-500">Protected</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Content: Limits -->
+    <div x-show="activeTab === 'limits'" x-cloak>
+        <div class="cyber-card">
+            <div class="cyber-card-header bg-gradient-to-r from-purple-600 to-purple-800">
+                <h3 class="text-lg font-semibold font-mono flex items-center">
+                    <i class="fas fa-sliders-h mr-2"></i> USER LIMITS & USAGE
+                </h3>
+            </div>
+            <div class="cyber-card-body">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-800">
+                            <tr>
+                                <th class="px-4 py-3 text-left">User</th>
+                                <th class="px-4 py-3 text-left">Streams</th>
+                                <th class="px-4 py-3 text-left">Storage</th>
+                                <th class="px-4 py-3 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700">
+                            {% for user in user_limits %}
+                            <tr class="hover:bg-gray-800/50">
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center">
+                                        {% if user.is_admin %}
+                                            <i class="fas fa-crown text-yellow-400 mr-2"></i>
+                                        {% else %}
+                                            <i class="fas fa-user text-cyan-400 mr-2"></i>
+                                        {% endif %}
+                                        <span class="font-medium">{{ user.username }}</span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if user.is_admin %}
+                                        <span class="text-yellow-400 text-xs">Unlimited</span>
+                                    {% else %}
+                                        <div class="space-y-1">
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span>{{ user.current_streams }}/{{ user.max_streams }}</span>
+                                                {% if user.can_add_stream %}
+                                                    <i class="fas fa-check-circle text-green-400"></i>
+                                                {% else %}
+                                                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                                                {% endif %}
+                                            </div>
+                                            <div class="w-32 bg-gray-700 rounded-full h-1.5">
+                                                {% set stream_pct = (user.current_streams / user.max_streams * 100)|round if user.max_streams > 0 else 0 %}
+                                                <div class="h-1.5 rounded-full {% if stream_pct < 70 %}bg-green-500{% elif stream_pct < 90 %}bg-yellow-500{% else %}bg-red-500{% endif %}" 
+                                                     style="width: {{ stream_pct }}%"></div>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if user.is_admin %}
+                                        <span class="text-yellow-400 text-xs">Unlimited</span>
+                                    {% else %}
+                                        <div class="space-y-1">
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span>{{ "%.1f"|format(user.current_storage_mb) }}MB / {{ user.max_storage_mb }}MB</span>
+                                                {% if user.can_upload %}
+                                                    <i class="fas fa-check-circle text-green-400"></i>
+                                                {% else %}
+                                                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                                                {% endif %}
+                                            </div>
+                                            <div class="w-32 bg-gray-700 rounded-full h-1.5">
+                                                {% set storage_pct = (user.current_storage_mb / user.max_storage_mb * 100)|round if user.max_storage_mb > 0 else 0 %}
+                                                <div class="h-1.5 rounded-full {% if storage_pct < 70 %}bg-green-500{% elif storage_pct < 90 %}bg-yellow-500{% else %}bg-red-500{% endif %}" 
+                                                     style="width: {{ storage_pct }}%"></div>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    {% if not user.is_admin %}
+                                        <button 
+                                            @click="editLimitsUser = {{ user.user_id }}; editMaxStreams = {{ user.max_streams }}; editMaxStorage = {{ user.max_storage_mb }}"
+                                            class="cyber-btn small primary">
+                                            <i class="fas fa-edit mr-1"></i>Edit
+                                        </button>
+                                    {% else %}
+                                        <span class="text-xs text-gray-500">Admin</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Change Password -->
+    <div x-show="changePasswordUser" x-cloak class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="cyber-card w-full max-w-md mx-4">
+            <div class="cyber-card-header bg-gradient-to-r from-yellow-600 to-yellow-800">
+                <h3 class="text-lg font-semibold font-mono flex items-center justify-between">
+                    <span><i class="fas fa-key mr-2"></i> CHANGE PASSWORD</span>
+                    <button @click="changePasswordUser = null" class="text-white hover:text-gray-300">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </h3>
+            </div>
+            <div class="cyber-card-body">
+                <form action="{{ url_for('admin_users') }}" method="POST" class="space-y-4">
+                    <input type="hidden" name="action" value="change_password">
+                    <input type="hidden" name="username" :value="changePasswordUser">
+                    
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">Username</label>
+                        <input type="text" :value="changePasswordUser" disabled class="cyber-input bg-gray-800">
+                    </div>
+                    
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">New Password</label>
+                        <input type="password" name="new_password" x-model="newPassword" required class="cyber-input" minlength="4">
+                    </div>
+                    
+                    <div class="flex space-x-3">
+                        <button type="button" @click="changePasswordUser = null" class="cyber-btn secondary flex-1">Cancel</button>
+                        <button type="submit" class="cyber-btn warning flex-1">
+                            <i class="fas fa-save mr-2"></i>Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Delete User -->
+    <div x-show="deleteUser" x-cloak class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="cyber-card w-full max-w-md mx-4">
+            <div class="cyber-card-header bg-gradient-to-r from-red-600 to-red-800">
+                <h3 class="text-lg font-semibold font-mono flex items-center justify-between">
+                    <span><i class="fas fa-exclamation-triangle mr-2"></i> DELETE USER</span>
+                    <button @click="deleteUser = null" class="text-white hover:text-gray-300">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </h3>
+            </div>
+            <div class="cyber-card-body">
+                <p class="text-gray-300 mb-4">
+                    Are you sure you want to delete user <strong class="text-cyan-400" x-text="deleteUser"></strong>?
+                    This action cannot be undone.
+                </p>
+                <form action="{{ url_for('admin_users') }}" method="POST" class="flex space-x-3">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="username" :value="deleteUser">
+                    <button type="button" @click="deleteUser = null" class="cyber-btn secondary flex-1">Cancel</button>
+                    <button type="submit" class="cyber-btn danger flex-1">
+                        <i class="fas fa-trash mr-2"></i>Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Limits -->
+    <div x-show="editLimitsUser" x-cloak class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="cyber-card w-full max-w-md mx-4">
+            <div class="cyber-card-header bg-gradient-to-r from-purple-600 to-purple-800">
+                <h3 class="text-lg font-semibold font-mono flex items-center justify-between">
+                    <span><i class="fas fa-sliders-h mr-2"></i> EDIT USER LIMITS</span>
+                    <button @click="editLimitsUser = null" class="text-white hover:text-gray-300">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </h3>
+            </div>
+            <div class="cyber-card-body">
+                <form action="{{ url_for('admin_update_limits') }}" method="POST" class="space-y-4">
+                    <input type="hidden" name="user_id" :value="editLimitsUser">
+                    
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-stream mr-2"></i>Max Streams/Schedules
+                        </label>
+                        <input type="number" name="max_streams" x-model="editMaxStreams" min="0" required class="cyber-input">
+                        <p class="text-xs text-gray-500 mt-1">Total live streams + schedules allowed</p>
+                    </div>
+                    
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-hdd mr-2"></i>Max Storage (MB)
+                        </label>
+                        <input type="number" name="max_storage_mb" x-model="editMaxStorage" min="0" required class="cyber-input">
+                        <p class="text-xs text-gray-500 mt-1">
+                            Quick: 
+                            <button type="button" @click="editMaxStorage = 1000" class="text-cyan-400 hover:underline">1GB</button> | 
+                            <button type="button" @click="editMaxStorage = 5000" class="text-cyan-400 hover:underline">5GB</button> | 
+                            <button type="button" @click="editMaxStorage = 10000" class="text-cyan-400 hover:underline">10GB</button> | 
+                            <button type="button" @click="editMaxStorage = 50000" class="text-cyan-400 hover:underline">50GB</button>
+                        </p>
+                    </div>
+                    
+                    <div class="flex space-x-3">
+                        <button type="button" @click="editLimitsUser = null" class="cyber-btn secondary flex-1">Cancel</button>
+                        <button type="submit" class="cyber-btn primary flex-1">
+                            <i class="fas fa-save mr-2"></i>Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- AlpineJS -->
+<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+{% endblock %}

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Limits Management - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">
+                    <i class="fas fa-users-cog mr-2"></i>User Limits Management
+                </h1>
+                <p class="text-gray-400">Manage stream and storage limits for each user</p>
+            </div>
+            <a href="/admin/users" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Users
+            </a>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="mb-4 p-4 rounded {% if category == 'error' %}bg-red-600{% else %}bg-green-600{% endif %}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Users Table -->
+        <div class="bg-gray-800 rounded-lg overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left">User</th>
+                        <th class="px-6 py-3 text-left">Streams</th>
+                        <th class="px-6 py-3 text-left">Storage</th>
+                        <th class="px-6 py-3 text-left">Limits</th>
+                        <th class="px-6 py-3 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-700">
+                    {% for user in users %}
+                    <tr class="hover:bg-gray-750">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                {% if user.is_admin %}
+                                    <i class="fas fa-crown text-yellow-500 mr-2"></i>
+                                {% else %}
+                                    <i class="fas fa-user text-gray-400 mr-2"></i>
+                                {% endif %}
+                                <span class="font-medium">{{ user.username }}</span>
+                            </div>
+                        </td>
+                        
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                <div class="mr-3">
+                                    <div class="text-sm font-medium">
+                                        {{ user.current_streams }}
+                                        {% if not user.is_admin %}
+                                            / {{ user.max_streams or '∞' }}
+                                        {% else %}
+                                            <span class="text-gray-400">(Unlimited)</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if not user.is_admin and user.max_streams %}
+                                    <div class="w-32 bg-gray-700 rounded-full h-2 mt-1">
+                                        <div class="bg-blue-500 h-2 rounded-full" 
+                                             style="width: {{ (user.current_streams / user.max_streams * 100)|round }}%">
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% if not user.is_admin %}
+                                    {% if user.can_add_stream %}
+                                        <i class="fas fa-check-circle text-green-500"></i>
+                                    {% else %}
+                                        <i class="fas fa-exclamation-circle text-red-500" title="Limit reached"></i>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                <div class="mr-3">
+                                    <div class="text-sm font-medium">
+                                        {{ "%.2f"|format(user.current_storage_mb) }} MB
+                                        {% if not user.is_admin %}
+                                            / {{ user.max_storage_mb or '∞' }} MB
+                                        {% else %}
+                                            <span class="text-gray-400">(Unlimited)</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if not user.is_admin and user.max_storage_mb %}
+                                    <div class="w-32 bg-gray-700 rounded-full h-2 mt-1">
+                                        {% set storage_pct = (user.current_storage_mb / user.max_storage_mb * 100)|round %}
+                                        <div class="h-2 rounded-full 
+                                                    {% if storage_pct < 70 %}bg-green-500
+                                                    {% elif storage_pct < 90 %}bg-yellow-500
+                                                    {% else %}bg-red-500{% endif %}" 
+                                             style="width: {{ storage_pct }}%">
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% if not user.is_admin %}
+                                    {% if user.can_upload %}
+                                        <i class="fas fa-check-circle text-green-500"></i>
+                                    {% else %}
+                                        <i class="fas fa-exclamation-circle text-red-500" title="Storage full"></i>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <td class="px-6 py-4">
+                            {% if user.is_admin %}
+                                <span class="px-2 py-1 bg-yellow-600 text-xs rounded">ADMIN (Unlimited)</span>
+                            {% else %}
+                                <button onclick="editLimits({{ user.user_id }}, '{{ user.username }}', {{ user.max_streams or 0 }}, {{ user.max_storage_mb or 0 }})"
+                                        class="text-blue-400 hover:text-blue-300">
+                                    <i class="fas fa-edit mr-1"></i>Edit Limits
+                                </button>
+                            {% endif %}
+                        </td>
+                        
+                        <td class="px-6 py-4 text-center">
+                            {% if not user.is_admin %}
+                                <div class="flex justify-center space-x-2">
+                                    <button onclick="resetUsage({{ user.user_id }}, '{{ user.username }}')"
+                                            class="bg-yellow-600 hover:bg-yellow-500 px-3 py-1 rounded text-sm"
+                                            title="Clear user data (will free storage)">
+                                        <i class="fas fa-sync-alt mr-1"></i>Reset
+                                    </button>
+                                </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Legend -->
+        <div class="mt-4 text-sm text-gray-400">
+            <p><i class="fas fa-check-circle text-green-500 mr-2"></i>Can add more</p>
+            <p><i class="fas fa-exclamation-circle text-red-500 mr-2"></i>Limit reached</p>
+        </div>
+    </div>
+
+    <!-- Edit Limits Modal -->
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 class="text-xl font-bold mb-4">
+                <i class="fas fa-edit mr-2"></i>Edit User Limits
+            </h3>
+            
+            <form id="editForm" method="POST" action="/admin/users/update_limits">
+                <input type="hidden" id="edit_user_id" name="user_id">
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">User</label>
+                    <input type="text" id="edit_username" readonly 
+                           class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">
+                        <i class="fas fa-stream mr-1"></i>Max Streams/Schedules
+                    </label>
+                    <input type="number" name="max_streams" id="edit_max_streams" min="0" required
+                           class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600">
+                    <p class="text-xs text-gray-400 mt-1">Total number of live streams + schedules allowed</p>
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-sm font-medium mb-2">
+                        <i class="fas fa-hdd mr-1"></i>Max Storage (MB)
+                    </label>
+                    <input type="number" name="max_storage_mb" id="edit_max_storage" min="0" required
+                           class="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600">
+                    <p class="text-xs text-gray-400 mt-1">
+                        Quick values: 
+                        <button type="button" onclick="setStorage(1000)" class="text-blue-400 hover:underline">1GB</button> | 
+                        <button type="button" onclick="setStorage(5000)" class="text-blue-400 hover:underline">5GB</button> | 
+                        <button type="button" onclick="setStorage(10000)" class="text-blue-400 hover:underline">10GB</button> | 
+                        <button type="button" onclick="setStorage(50000)" class="text-blue-400 hover:underline">50GB</button>
+                    </p>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal()"
+                            class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded">
+                        <i class="fas fa-save mr-2"></i>Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function editLimits(userId, username, maxStreams, maxStorage) {
+            document.getElementById('edit_user_id').value = userId;
+            document.getElementById('edit_username').value = username;
+            document.getElementById('edit_max_streams').value = maxStreams;
+            document.getElementById('edit_max_storage').value = maxStorage;
+            document.getElementById('editModal').classList.remove('hidden');
+            document.getElementById('editModal').classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+            document.getElementById('editModal').classList.remove('flex');
+        }
+
+        function setStorage(mb) {
+            document.getElementById('edit_max_storage').value = mb;
+        }
+
+        function resetUsage(userId, username) {
+            if (confirm(`Reset all data for user "${username}"?\n\nThis will delete:\n- All videos\n- All thumbnails\n- All streams\n- All schedules\n\nThis action cannot be undone!`)) {
+                fetch('/admin/users/reset_usage', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'user_id=' + userId
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('User data reset successfully!');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                });
+            }
+        }
+
+        // Close modal on ESC key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

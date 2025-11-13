@@ -44,10 +44,7 @@
                             <i class="fas fa-user-shield mr-2"></i>Role
                         </label>
                         <select name="role" class="cyber-input">
-                            <option value="demo">Demo (Read Only)</option>
-                            <option value="silver">Silver</option>
-                            <option value="gold">Gold</option>
-                            <option value="platinum">Platinum</option>
+                            <option value="user">User</option>
                             <option value="admin">Admin (Full Access)</option>
                         </select>
                     </div>
@@ -101,8 +98,8 @@
                                             <input type="hidden" name="action" value="update_role">
                                             <input type="hidden" name="username" value="{{ username }}">
                                             <select name="role" class="cyber-input-sm text-xs">
-                                                {% for r in ['demo','silver','gold','platinum','admin'] %}
-                                                <option value="{{ r }}" {% if data.get('role', 'demo') == r %}selected{% endif %}>{{ r }}</option>
+                                                {% for r in ['user', 'admin'] %}
+                                                <option value="{{ r }}" {% if data.get('role', 'user') == r %}selected{% endif %}>{{ r|capitalize }}</option>
                                                 {% endfor %}
                                             </select>
                                             <button type="submit" class="cyber-btn-sm primary">

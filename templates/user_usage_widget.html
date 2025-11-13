@@ -1,0 +1,86 @@
+<!-- User Usage Widget - Include in navbar or dashboard -->
+{% if current_user.is_authenticated and user_usage %}
+<div class="bg-gray-800 rounded-lg p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-semibold">
+            <i class="fas fa-chart-pie mr-2"></i>Your Usage
+        </h3>
+        {% if user_usage.is_admin %}
+            <span class="px-2 py-1 bg-yellow-600 text-xs rounded">ADMIN</span>
+        {% endif %}
+    </div>
+    
+    {% if not user_usage.is_admin %}
+    <!-- Streams Usage -->
+    <div class="mb-4">
+        <div class="flex justify-between items-center mb-1">
+            <span class="text-sm text-gray-400">
+                <i class="fas fa-stream mr-1"></i>Streams/Schedules
+            </span>
+            <span class="text-sm font-medium">
+                {{ user_usage.current_streams }}/{{ user_usage.max_streams }}
+            </span>
+        </div>
+        <div class="w-full bg-gray-700 rounded-full h-2">
+            {% set stream_pct = (user_usage.current_streams / user_usage.max_streams * 100)|round if user_usage.max_streams > 0 else 0 %}
+            <div class="h-2 rounded-full transition-all
+                        {% if stream_pct < 70 %}bg-green-500
+                        {% elif stream_pct < 90 %}bg-yellow-500
+                        {% else %}bg-red-500{% endif %}" 
+                 style="width: {{ stream_pct }}%">
+            </div>
+        </div>
+        <div class="text-xs text-gray-500 mt-1">
+            {{ user_usage.streams_remaining }} remaining
+        </div>
+    </div>
+    
+    <!-- Storage Usage -->
+    <div>
+        <div class="flex justify-between items-center mb-1">
+            <span class="text-sm text-gray-400">
+                <i class="fas fa-hdd mr-1"></i>Storage
+            </span>
+            <span class="text-sm font-medium">
+                {{ "%.1f"|format(user_usage.current_storage_mb) }}MB / 
+                {{ "%.0f"|format(user_usage.max_storage_mb) }}MB
+            </span>
+        </div>
+        <div class="w-full bg-gray-700 rounded-full h-2">
+            {% set storage_pct = (user_usage.current_storage_mb / user_usage.max_storage_mb * 100)|round if user_usage.max_storage_mb > 0 else 0 %}
+            <div class="h-2 rounded-full transition-all
+                        {% if storage_pct < 70 %}bg-green-500
+                        {% elif storage_pct < 90 %}bg-yellow-500
+                        {% else %}bg-red-500{% endif %}" 
+                 style="width: {{ storage_pct }}%">
+            </div>
+        </div>
+        <div class="text-xs text-gray-500 mt-1">
+            {{ "%.1f"|format(user_usage.storage_remaining_mb) }}MB remaining
+        </div>
+    </div>
+    
+    <!-- Warnings -->
+    {% if not user_usage.can_add_stream %}
+    <div class="mt-3 p-2 bg-red-900 bg-opacity-50 rounded text-xs">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        Stream limit reached. Contact admin for more.
+    </div>
+    {% endif %}
+    
+    {% if not user_usage.can_upload %}
+    <div class="mt-3 p-2 bg-red-900 bg-opacity-50 rounded text-xs">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        Storage full. Delete files or contact admin.
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <!-- Admin view -->
+    <div class="text-center py-2">
+        <i class="fas fa-infinity text-yellow-500 text-3xl mb-2"></i>
+        <p class="text-sm text-gray-400">Unlimited Access</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
