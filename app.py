@@ -324,11 +324,17 @@ def start_ffmpeg_stream(stream):
             print(f"Error: Video file not found: {video_path}")
             return False
         
+        # Map database fields to expected fields (backward compatibility)
+        # server_type → rtmp_server
+        # stream_url → custom_rtmp
+        rtmp_server = stream.get('rtmp_server') or stream.get('server_type', 'youtube')
+        custom_rtmp = stream.get('custom_rtmp') or stream.get('stream_url', '')
+        
         # Get RTMP URL
-        if stream['rtmp_server'] == 'custom':
-            rtmp_url = stream['custom_rtmp']
+        if rtmp_server == 'custom':
+            rtmp_url = custom_rtmp
         else:
-            rtmp_url = RTMP_SERVERS.get(stream['rtmp_server'], RTMP_SERVERS['youtube'])
+            rtmp_url = RTMP_SERVERS.get(rtmp_server, RTMP_SERVERS['youtube'])
         
         # Build full RTMP URL with stream key
         full_rtmp_url = f"{rtmp_url}{stream['stream_key']}"
@@ -2157,14 +2163,18 @@ def schedules():
         # Convert to format compatible with templates
         schedules = []
         for schedule in db_schedules:
+            # Clean thumbnail path: remove 'thumbnails/' prefix if exists
+            thumbnail_raw = schedule.get('thumbnail', '')
+            thumbnail_clean = thumbnail_raw.replace('thumbnails/', '') if thumbnail_raw else ''
+            
             schedules.append({
                 'id': schedule['id'],
                 'title': schedule['title'],
                 'description': schedule.get('description', ''),
                 'scheduledStartTime': schedule['scheduled_start_time'],
                 'videoFile': schedule.get('video_file', ''),
-                'thumbnail': schedule.get('thumbnail', ''),
-                'thumbnailFile': schedule.get('thumbnail', ''),
+                'thumbnail': thumbnail_clean,
+                'thumbnailFile': thumbnail_clean,
                 'streamNameExisting': schedule.get('stream_name', ''),
                 'streamIdExisting': schedule.get('stream_id', ''),
                 'tokenFile': schedule.get('token_file', ''),
