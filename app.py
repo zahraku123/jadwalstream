@@ -3520,62 +3520,69 @@ def upload_metadata_excel():
 @demo_readonly
 def save_bulk_upload_queue_route():
     """Save videos to upload queue with metadata - PER USER"""
-    from modules.database import add_bulk_upload_item, get_looped_videos
-    
-    user_id = int(current_user.id)
-    data = request.get_json()
-    
-    if not data or not data.get('videos'):
-        return jsonify({'success': False, 'error': 'Data tidak valid'}), 400
-    
-    videos = data['videos']
-    start_date_str = data.get('start_date')
-    token_file = data.get('token_file')
-    stream_id = data.get('stream_id')
-    thumbnail_id = data.get('thumbnail_id')
-    privacy_status = data.get('privacy_status', 'unlisted')
-    
-    if not start_date_str or not token_file:
-        return jsonify({'success': False, 'error': 'Tanggal awal dan token harus diisi'}), 400
-    
     try:
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%dT%H:%M')
-    except:
-        return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
-    
-    # Get looped videos database for current user
-    looped_videos = get_looped_videos(user_id)
-    
-    added_count = 0
-    for idx, video_data in enumerate(videos):
-        video_id = video_data['video_id']
-        video = next((v for v in looped_videos if v['id'] == video_id), None)
-        if not video or video['status'] != 'completed':
-            continue
+        from modules.database import add_bulk_upload_item, get_looped_videos
         
-        # Calculate publish date (increment by 1 day for each video)
-        publish_date = start_date + timedelta(days=idx)
+        user_id = int(current_user.id)
+        data = request.get_json()
         
-        queue_entry = {
-            'id': str(uuid.uuid4()),
-            'video_id': video_id,
-            'video_path': os.path.join(LOOPED_FOLDER, video['output_filename']),
-            'title': video_data['title'],
-            'description': video_data['description'],
-            'tags': video_data['tags'].split(',') if isinstance(video_data['tags'], str) else video_data['tags'],
-            'scheduled_publish_time': publish_date.strftime('%Y-%m-%d %H:%M:%S'),
-            'token_file': token_file,
-            'stream_id': stream_id,
-            'thumbnail_id': thumbnail_id,
-            'privacy_status': privacy_status,
-            'status': 'queued'
-        }
+        if not data or not data.get('videos'):
+            return jsonify({'success': False, 'error': 'Data tidak valid'}), 400
         
-        # Add to database
-        add_bulk_upload_item(user_id, queue_entry)
-        added_count += 1
+        videos = data['videos']
+        start_date_str = data.get('start_date')
+        token_file = data.get('token_file')
+        stream_id = data.get('stream_id')
+        thumbnail_id = data.get('thumbnail_id')
+        privacy_status = data.get('privacy_status', 'unlisted')
+        
+        if not start_date_str or not token_file:
+            return jsonify({'success': False, 'error': 'Tanggal awal dan token harus diisi'}), 400
+        
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%dT%H:%M')
+        except:
+            return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
+        
+        # Get looped videos database for current user
+        looped_videos = get_looped_videos(user_id)
+        
+        added_count = 0
+        for idx, video_data in enumerate(videos):
+            video_id = video_data['video_id']
+            video = next((v for v in looped_videos if v['id'] == video_id), None)
+            if not video or video['status'] != 'completed':
+                continue
+            
+            # Calculate publish date (increment by 1 day for each video)
+            publish_date = start_date + timedelta(days=idx)
+            
+            queue_entry = {
+                'id': str(uuid.uuid4()),
+                'video_id': video_id,
+                'video_path': os.path.join(LOOPED_FOLDER, video['output_filename']),
+                'title': video_data['title'],
+                'description': video_data['description'],
+                'tags': video_data['tags'].split(',') if isinstance(video_data['tags'], str) else video_data['tags'],
+                'scheduled_publish_time': publish_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'token_file': token_file,
+                'stream_id': stream_id,
+                'thumbnail_id': thumbnail_id,
+                'privacy_status': privacy_status,
+                'status': 'queued'
+            }
+            
+            # Add to database
+            add_bulk_upload_item(user_id, queue_entry)
+            added_count += 1
     
-    return jsonify({'success': True, 'message': f'{added_count} video ditambahkan ke antrian upload'})
+        return jsonify({'success': True, 'message': f'{added_count} video ditambahkan ke antrian upload'})
+    
+    except Exception as e:
+        logging.error(f"Error adding to queue: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/bulk-upload-queue')
 @login_required
