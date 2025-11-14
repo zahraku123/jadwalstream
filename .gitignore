@@ -44,13 +44,19 @@ data.xlsx
 live_stream_data.xlsx
 live_stream_data_updated.xlsx
 scheduler_status.json
+auto_upload_scheduler_status.json
 license_cache.json
 stream_timers.json
 thumbnail_database.json
 video_database.json
 live_streams.json
+looped_videos.json
 jadwalstream.db
+jadwalstream.db.backup_*
 modules/database/jadwalstream.db
+auto_upload_config.json
+gemini_config.json
+license_config.json
 
 # User generated content
 videos/
@@ -82,5 +88,13 @@ package-lock.json
 
 # Windows installer
 install.bat
-# Ignore backup files with tokens
-archive/backups/*.json
+# Backup and archive folders
+archive/
+json_backups/
+backup/
+
+# Test and migration scripts
+test_*.py
+migrate_*.py
+*_test.sh
+backup_*.sh
