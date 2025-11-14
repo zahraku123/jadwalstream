@@ -2394,13 +2394,23 @@ def tokens():
 @demo_readonly
 def create_token():
     try:
+        from modules.services.client_secret_manager import get_user_client_secret_path
+        
         token_name = request.form.get('token_name', 'token.json')
         if not token_name.endswith('.json'):
             token_name += '.json'
         
+        # Get user's client_secret path
+        user_id = int(current_user.id)
+        client_secret_path = get_user_client_secret_path(user_id)
+        
+        if not client_secret_path or not os.path.exists(client_secret_path):
+            flash('Please upload your client_secret.json first in YouTube API Settings', 'error')
+            return redirect(url_for('tokens'))
+        
         # Generate authorization URL using Flow
         flow = Flow.from_client_secrets_file(
-            'client_secret.json',
+            client_secret_path,
             scopes=SCOPES,
             redirect_uri='http://localhost'
         )
@@ -2459,9 +2469,18 @@ def complete_token():
                 flash(f'Error parsing URL: {str(e)}', 'error')
                 return redirect(url_for('tokens'))
         
+        # Get user's client_secret path
+        from modules.services.client_secret_manager import get_user_client_secret_path
+        user_id = int(current_user.id)
+        client_secret_path = get_user_client_secret_path(user_id)
+        
+        if not client_secret_path or not os.path.exists(client_secret_path):
+            flash('Please upload your client_secret.json first in YouTube API Settings', 'error')
+            return redirect(url_for('tokens'))
+        
         # Create flow again and fetch token
         flow = Flow.from_client_secrets_file(
-            'client_secret.json',
+            client_secret_path,
             scopes=SCOPES,
             redirect_uri='http://localhost'
         )
@@ -2471,7 +2490,6 @@ def complete_token():
         creds = flow.credentials
         
         # Save token to tokens folder (per-user)
-        user_id = int(current_user.id)
         token_path = get_token_path(token_name, user_id)
         with open(token_path, 'w') as f:
             f.write(creds.to_json())
