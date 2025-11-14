@@ -7,7 +7,7 @@ Provides same interface as JSON-based functions but uses SQLite backend
 import json
 from typing import List, Dict, Optional
 from flask_login import current_user
-from database import (
+from modules.database.database import (
     get_videos, get_video_by_id, add_video, delete_video,
     get_thumbnails, get_thumbnail_by_id, add_thumbnail, delete_thumbnail,
     get_live_streams, get_live_stream_by_id, add_live_stream, update_live_stream, delete_live_stream,

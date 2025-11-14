@@ -7,7 +7,7 @@ import pytz
 import time
 import logging
 import json
-import telegram_notifier
+from modules.services import telegram_notifier
 
 # ================= CONFIG =================
 EXCEL_FILE = 'live_stream_data.xlsx'
@@ -16,7 +16,11 @@ DRY_RUN = False
 STREAM_MAPPING_FILE = 'stream_mapping.json'
 TOKENS_FOLDER = 'tokens'  # Folder for token files
 
+# Global reverse mapping cache (stream_id -> stream_name)
+REVERSE_STREAM_MAPPING = {}
+
 def load_stream_mapping(token_file):
+    global REVERSE_STREAM_MAPPING
     try:
         with open(STREAM_MAPPING_FILE, 'r') as f:
             mapping_data = json.load(f)
@@ -25,6 +29,8 @@ def load_stream_mapping(token_file):
                 stream_mapping = {}
                 for stream_id, stream_info in mapping_data[token_file].items():
                     stream_mapping[stream_info['title']] = stream_id
+                    # Update global reverse mapping
+                    REVERSE_STREAM_MAPPING[stream_id] = stream_info['title']
                 return stream_mapping
             else:
                 logging.error(f"Token file {token_file} not found in {STREAM_MAPPING_FILE}")

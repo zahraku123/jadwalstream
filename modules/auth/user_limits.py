@@ -4,7 +4,7 @@ Functions to manage and check per-user limits (streams, storage)
 """
 
 import os
-from database import get_db_connection
+from modules.database.database import get_db_connection
 
 def get_user_limits(user_id: int) -> dict:
     """Get user limits and current usage"""

@@ -1,6 +1,6 @@
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
-from database import (
+from modules.database.database import (
     get_user_by_username as db_get_user_by_username,
     get_user_by_id as db_get_user_by_id,
     create_user as db_create_user,

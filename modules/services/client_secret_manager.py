@@ -5,7 +5,7 @@ Helper functions to manage per-user YouTube API credentials
 
 import os
 import json
-from database import get_db_connection
+from modules.database.database import get_db_connection
 
 # Folder untuk store client secrets per user
 CLIENT_SECRETS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'client_secrets')

@@ -3,7 +3,7 @@
 {% block title %}Live Streaming{% endblock %}
 
 {% block content %}
-<div x-data="{ showForm: false, customRtmp: false, videoPreview: false, thumbnailSrc: '' }">
+<div x-data="{ showForm: false, customRtmp: false, videoPreview: false, thumbnailSrc: '', selectedVideoFile: '' }">
     <!-- Header -->
     <div class="mb-6">
         <div class="mb-4">
@@ -105,7 +105,7 @@
                                 {% endif %}
                             </div>
                             
-                            <!-- Video Selection -->
+                            <!-- Video Selection with Preview -->
                             <div class="cyber-input-group">
                                 <label class="cyber-label">
                                     <i class="fas fa-video mr-2"></i>Pilih Video
@@ -118,6 +118,14 @@
                                     <option value="{{ video.filename }}" data-thumbnail="{{ video.thumbnail if video.thumbnail else '' }}">{{ video.title }}</option>
                                     {% endfor %}
                                 </select>
+                                
+                                <!-- Video Preview -->
+                                <div x-show="selectedVideoFile" class="mt-3">
+                                    <video x-ref="videoPreview" width="100%" preload="metadata" controls class="w-full max-w-md aspect-video bg-slate-900 rounded-lg border border-slate-700">
+                                        <source x-bind:src="selectedVideoFile ? `/videos/${selectedVideoFile}#t=0.5` : ''" type="video/mp4">
+                                        Your browser does not support the video tag.
+                                    </video>
+                                </div>
                             </div>
                             
                             <!-- Video Preview -->
@@ -272,11 +280,19 @@
 <script>
     function handleVideoChange(event) {
         const selectedOption = event.target.options[event.target.selectedIndex];
-        const thumbnailFilename = selectedOption.getAttribute('data-thumbnail');
+        const videoFilename = event.target.value;
         
         // Using Alpine.js magic to update component data
         const component = event.target.closest('[x-data]').__x.$data;
         
+        if (videoFilename) {
+            component.selectedVideoFile = videoFilename;
+        } else {
+            component.selectedVideoFile = '';
+        }
+        
+        // Legacy thumbnail support (dapat dihapus jika tidak dipakai)
+        const thumbnailFilename = selectedOption.getAttribute('data-thumbnail');
         if (thumbnailFilename && thumbnailFilename !== '' && thumbnailFilename !== 'None') {
             component.thumbnailSrc = '/thumbnails/' + thumbnailFilename;
             component.videoPreview = true;

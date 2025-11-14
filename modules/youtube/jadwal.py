@@ -13,10 +13,10 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from database import get_all_pending_schedules, update_schedule_status, get_user_by_id, get_db_connection
-from live import schedule_live_stream
-from kunci import get_youtube_service
-import telegram_notifier
+from modules.database.database import get_all_pending_schedules, update_schedule_status, get_user_by_id, get_db_connection
+from modules.youtube.live import schedule_live_stream
+from modules.youtube.kunci import get_youtube_service
+from modules.services import telegram_notifier
 
 # ================= CONFIG =================
 SCHEDULE_TIMES = ["00:23", "00:37", "00:39"]  # Jakarta time

@@ -6,7 +6,7 @@ import os
 import json
 import requests
 from datetime import datetime, timedelta
-from hwid import get_hwid, get_system_info
+from modules.utils.hwid import get_hwid, get_system_info
 
 # Apps Script Configuration
 APPS_SCRIPT_URL = ''  # Will be set from config file

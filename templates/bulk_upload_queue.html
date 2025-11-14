@@ -289,19 +289,26 @@
             {% if queue %}
             <div class="space-y-3">
                 {% for item in queue %}
-                <div class="glass-panel rounded-lg p-4 border border-dark-border hover:border-blue-500/30 transition-all" data-item-id="{{ item.id }}" data-status="{{ item.status }}">
+                <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-blue-500/30 transition-all" data-item-id="{{ item.id }}" data-status="{{ item.status }}">
                     <div class="flex items-start gap-3">
-                        <!-- Checkbox (only for completed/failed items) -->
-                        {% if item.status in ['completed', 'failed'] %}
-                        <div class="flex-shrink-0 pt-1">
-                            <input type="checkbox" 
-                                   x-model="selectedItems" 
-                                   value="{{ item.id }}"
-                                   class="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-600 rounded bg-dark-card">
+                        <!-- Video Preview -->
+                        <div class="flex-shrink-0 w-48">
+                            <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                                <source src="{{ url_for('serve_video', filename=item.video_filename) }}#t=0.5">
+                                Your browser does not support the video tag.
+                            </video>
                         </div>
-                        {% endif %}
 
-                        <div class="flex-1">
+                        <div class="flex-1 p-4">
+                            <!-- Checkbox (only for completed/failed items) -->
+                            {% if item.status in ['completed', 'failed'] %}
+                            <div class="absolute top-4 left-4">
+                                <input type="checkbox" 
+                                       x-model="selectedItems" 
+                                       value="{{ item.id }}"
+                                       class="h-5 w-5 text-orange-600 focus:ring-orange-500 border-gray-600 rounded bg-dark-card/80 cursor-pointer">
+                            </div>
+                            {% endif %}
                             <!-- Status Badge -->
                             <div class="flex items-center mb-2">
                                 {% if item.status == 'queued' %}

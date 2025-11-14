@@ -53,53 +53,154 @@
     <div class="glass-panel rounded-xl p-6 border border-orange-500/20 mb-6">
         <h2 class="text-xl font-semibold text-white mb-4">
             <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-600 text-white mr-2">1</span>
-            Select Looped Videos
+            Select Videos
         </h2>
 
-        {% if videos %}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {% for video in videos %}
-            <div class="glass-panel rounded-lg p-4 border border-dark-border hover:border-orange-500/50 transition-all">
-                <div class="flex items-start space-x-3">
+        <!-- Regular Videos Section -->
+        {% if regular_videos %}
+        <div class="mb-8">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-medium text-slate-200">
+                    <i class="fas fa-video text-cyan-400 mr-2"></i>
+                    Regular Videos
+                </h3>
+                <label class="flex items-center text-sm text-slate-400 cursor-pointer hover:text-cyan-400">
                     <input type="checkbox" 
-                           x-model="selectedVideos" 
-                           value="{{ video.id }}"
-                           id="video_{{ video.id }}"
-                           class="mt-1 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-600 rounded bg-dark-card">
-                    <label for="video_{{ video.id }}" class="flex-1 cursor-pointer">
-                        <div class="flex items-center mb-2">
+                           @change="toggleAllRegular($event.target.checked)"
+                           class="mr-2 h-4 w-4 text-cyan-600 focus:ring-cyan-500 border-gray-600 rounded bg-dark-card">
+                    Select All Regular
+                </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for video in regular_videos %}
+                <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-cyan-500/50 transition-all">
+                    <!-- Video Preview -->
+                    <div class="relative">
+                        <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                            <source src="{{ url_for('serve_video', filename=video.filename) }}#t=0.5">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="absolute top-2 left-2">
+                            <input type="checkbox" 
+                                   x-model="selectedVideos" 
+                                   value="regular_{{ video.id }}"
+                                   id="video_regular_{{ video.id }}"
+                                   data-type="regular"
+                                   class="h-5 w-5 text-cyan-600 focus:ring-cyan-500 border-gray-600 rounded bg-dark-card/80 regular-video-checkbox cursor-pointer">
+                        </div>
+                    </div>
+                    
+                    <!-- Video Info -->
+                    <div class="p-3">
+                        <label for="video_regular_{{ video.id }}" class="cursor-pointer">
+                            <div class="flex items-center mb-1">
+                                <i class="fas fa-video text-cyan-400 mr-2"></i>
+                                <h3 class="font-medium text-slate-200 text-sm line-clamp-1">{{ video.title }}</h3>
+                            </div>
+                            <p class="text-xs text-slate-500 truncate">
+                                {{ video.filename }}
+                            </p>
+                        </label>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Looped Videos Section -->
+        {% if looped_videos %}
+        <div>
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-medium text-slate-200">
+                    <i class="fas fa-repeat text-pink-400 mr-2"></i>
+                    Looped Videos
+                </h3>
+                <label class="flex items-center text-sm text-slate-400 cursor-pointer hover:text-pink-400">
+                    <input type="checkbox" 
+                           @change="toggleAllLooped($event.target.checked)"
+                           class="mr-2 h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-600 rounded bg-dark-card">
+                    Select All Looped
+                </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for video in looped_videos %}
+            <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-pink-500/50 transition-all">
+                <!-- Video Preview -->
+                <div class="relative">
+                    <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                        <source src="/looped-videos/{{ video.output_filename }}#t=0.5">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="absolute top-2 left-2">
+                        <input type="checkbox" 
+                               x-model="selectedVideos" 
+                               value="looped_{{ video.id }}"
+                               id="video_looped_{{ video.id }}"
+                               data-type="looped"
+                               class="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-600 rounded bg-dark-card/80 looped-video-checkbox cursor-pointer">
+                    </div>
+                    <div class="absolute top-2 right-2">
+                        <span class="cyber-badge danger text-xs">
+                            <i class="fas fa-repeat mr-1"></i>LOOPED
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- Video Info -->
+                <div class="p-3">
+                    <label for="video_looped_{{ video.id }}" class="cursor-pointer">
+                        <div class="flex items-center mb-1">
                             <i class="fas fa-repeat text-pink-400 mr-2"></i>
-                            <h3 class="font-medium text-slate-200 line-clamp-2">{{ video.original_title }}</h3>
+                            <h3 class="font-medium text-slate-200 text-sm line-clamp-1">{{ video.original_title }}</h3>
                         </div>
                         <p class="text-xs text-slate-400">
                             <i class="fas fa-clock mr-1"></i>
-                            {{ video.loop_duration_minutes }} minutes
+                            {{ video.loop_duration_minutes }} min
                         </p>
-                        <p class="text-xs text-slate-500 mt-1">
+                        <p class="text-xs text-slate-500 truncate">
                             {{ video.output_filename }}
                         </p>
                     </label>
                 </div>
             </div>
-            {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Summary -->
+        <div class="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+            <div class="flex items-center justify-between text-sm">
+                <span class="text-slate-400">
+                    <i class="fas fa-check-circle text-green-400 mr-2"></i>
+                    Total Selected:
+                </span>
+                <span class="text-white font-semibold text-lg" x-text="selectedVideos.length"></span>
+            </div>
         </div>
 
-        <div class="mt-4 text-sm text-slate-400">
-            <span x-text="selectedVideos.length"></span> video(s) selected
-        </div>
-        {% else %}
+        <!-- Empty State -->
+        {% if not regular_videos and not looped_videos %}
         <div class="text-center py-8">
             <i class="fas fa-inbox text-slate-600 text-5xl mb-3"></i>
-            <p class="text-slate-400">No looped videos available. Loop videos first.</p>
-            <a href="{{ url_for('video_looping') }}" class="inline-flex items-center mt-4 text-orange-400 hover:text-orange-300">
-                <i class="fas fa-arrow-right mr-2"></i>
-                Go to Video Looping
-            </a>
+            <p class="text-slate-400 mb-2">No videos available</p>
+            <p class="text-sm text-slate-500">Upload regular videos or create looped videos first</p>
+            <div class="flex gap-3 justify-center mt-4">
+                <a href="{{ url_for('video_gallery') }}" class="inline-flex items-center text-cyan-400 hover:text-cyan-300">
+                    <i class="fas fa-upload mr-2"></i>
+                    Upload Videos
+                </a>
+                <a href="{{ url_for('video_looping') }}" class="inline-flex items-center text-pink-400 hover:text-pink-300">
+                    <i class="fas fa-repeat mr-2"></i>
+                    Create Looped Videos
+                </a>
+            </div>
         </div>
         {% endif %}
     </div>
 
-    {% if videos %}
+    {% if regular_videos or looped_videos %}
     <!-- Step 2: Generate Metadata -->
     <div class="glass-panel rounded-xl p-6 border border-purple-500/20 mb-6" x-show="selectedVideos.length > 0">
         <h2 class="text-xl font-semibold text-white mb-4">
@@ -293,6 +394,36 @@ function bulkScheduling() {
         streamId: '',
         thumbnailId: '',
         privacyStatus: 'unlisted',
+        
+        // Toggle all regular videos
+        toggleAllRegular(checked) {
+            const regularCheckboxes = document.querySelectorAll('.regular-video-checkbox');
+            regularCheckboxes.forEach(cb => {
+                const value = cb.value;
+                if (checked) {
+                    if (!this.selectedVideos.includes(value)) {
+                        this.selectedVideos.push(value);
+                    }
+                } else {
+                    this.selectedVideos = this.selectedVideos.filter(v => v !== value);
+                }
+            });
+        },
+        
+        // Toggle all looped videos
+        toggleAllLooped(checked) {
+            const loopedCheckboxes = document.querySelectorAll('.looped-video-checkbox');
+            loopedCheckboxes.forEach(cb => {
+                const value = cb.value;
+                if (checked) {
+                    if (!this.selectedVideos.includes(value)) {
+                        this.selectedVideos.push(value);
+                    }
+                } else {
+                    this.selectedVideos = this.selectedVideos.filter(v => v !== value);
+                }
+            });
+        },
 
         isGenerateDisabled() {
             if (this.generating || this.selectedVideos.length === 0) {

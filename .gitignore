@@ -49,6 +49,8 @@ stream_timers.json
 thumbnail_database.json
 video_database.json
 live_streams.json
+jadwalstream.db
+modules/database/jadwalstream.db
 
 # User generated content
 videos/
@@ -59,6 +61,7 @@ backup/
 
 # Credentials
 client_secret.json
+modules/services/client_secrets/*.json
 
 # Config files (will use .example instead)
 telegram_config.json

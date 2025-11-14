@@ -10,7 +10,8 @@ from datetime import datetime
 from contextlib import contextmanager
 from typing import List, Dict, Optional, Any
 
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'jadwalstream.db')
+# Database file in project root, not in modules folder
+DB_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'jadwalstream.db')
 
 @contextmanager
 def get_db_connection():

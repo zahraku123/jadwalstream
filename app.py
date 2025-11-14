@@ -21,10 +21,15 @@ from werkzeug.utils import secure_filename
 import shlex
 import shutil
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from user_auth import User, get_user_by_id, authenticate_user, initialize_default_user, create_user, list_users, change_role, delete_user, change_user_password
+# Modular imports
+from modules.auth import (
+    User, get_user_by_id, authenticate_user, initialize_default_user, 
+    create_user, list_users, change_role, delete_user, change_user_password,
+    get_user_limits, can_user_add_stream, can_user_upload, 
+    update_user_limits, get_all_users_with_limits, calculate_user_storage
+)
 
-# SQLite Database imports
-from database_helpers import (
+from modules.database import (
     get_video_database as get_video_database_sqlite,
     get_thumbnail_database as get_thumbnail_database_sqlite,
     get_live_streams_data,
@@ -47,23 +52,16 @@ from database_helpers import (
     update_bulk_upload_in_db,
     save_stream_mapping_data,
     delete_stream_mapping_data,
-    delete_token_mappings_data
-)
-from database import get_schedules, get_all_schedules, init_database
-from user_limits import (
-    get_user_limits,
-    can_user_add_stream,
-    can_user_upload,
-    update_user_limits,
-    get_all_users_with_limits,
-    calculate_user_storage
+    delete_token_mappings_data,
+    get_schedules,
+    get_all_schedules,
+    init_database
 )
 
 import psutil
 import platform
-from license_validator import LicenseValidator, check_license
-from hwid import get_hwid, get_system_info
-import telegram_notifier
+from modules.utils import LicenseValidator, check_license, get_hwid, get_system_info
+from modules.services import telegram_notifier
 from functools import wraps
 
 
@@ -74,7 +72,7 @@ def require_admin(f):
         if not current_user.is_authenticated:
             return redirect(url_for('login'))
         
-        from database import get_user_by_id
+        from modules.database import get_user_by_id
         user_data = get_user_by_id(int(current_user.id))
         if not user_data or not user_data.get('is_admin'):
             flash('Admin access required', 'error')
@@ -482,7 +480,7 @@ def start_ffmpeg_stream(stream):
             # Get user_id from stream owner
             user_id = None
             if stream.get('owner'):
-                from user_auth import get_user_by_username
+                from modules.auth import get_user_by_username
                 user_data = get_user_by_username(stream['owner'])
                 if user_data:
                     user_id = user_data['id']
@@ -600,7 +598,7 @@ def stop_ffmpeg_stream(stream_id):
                 # Get user_id from stream owner
                 user_id = None
                 if stream.get('owner'):
-                    from user_auth import get_user_by_username
+                    from modules.auth import get_user_by_username
                     user_data = get_user_by_username(stream['owner'])
                     if user_data:
                         user_id = user_data['id']
@@ -784,7 +782,7 @@ def get_stream_name(stream_id):
 
     # Try live.py reverse mapping first (fast when available)
     try:
-        from live import REVERSE_STREAM_MAPPING
+        from modules.youtube.live import REVERSE_STREAM_MAPPING
         if stream_id in REVERSE_STREAM_MAPPING:
             return REVERSE_STREAM_MAPPING[stream_id]
         # if not found, don't return yet — fall back to saved mappings
@@ -814,7 +812,7 @@ def load_schedule_times(user_id=None):
     if user_id:
         # Load from database for specific user
         try:
-            from database import get_db_connection
+            from modules.database import get_db_connection
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('SELECT scheduler_times FROM users WHERE id = ?', (user_id,))
@@ -837,7 +835,7 @@ def save_schedule_times(times, user_id=None):
     if user_id:
         # Save to database for specific user
         try:
-            from database import get_db_connection
+            from modules.database import get_db_connection
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -857,7 +855,7 @@ def save_schedule_times(times, user_id=None):
 
 def get_stream_mapping():
     """Get stream mappings for current user from database"""
-    from database import get_stream_mappings
+    from modules.database import get_stream_mappings
     try:
         if current_user.is_authenticated:
             user_id = int(current_user.id)
@@ -881,7 +879,7 @@ def edit_schedule(index):
         schedule_id = index  # Using 'index' param for backward compatibility, but it's actually schedule_id
         
         # Get schedule from database
-        from database import get_schedule_by_id
+        from modules.database import get_schedule_by_id
         db_schedule = get_schedule_by_id(schedule_id, user_id)
         
         if not db_schedule:
@@ -942,7 +940,7 @@ def update_schedule(index):
             thumbnail_file = f'thumbnails/{thumbnail_file}'
         
         # Update in database
-        from database import update_schedule as db_update_schedule
+        from modules.database import update_schedule as db_update_schedule
         updates = {
             'title': data['title'],
             'description': data.get('description', ''),
@@ -983,7 +981,7 @@ def delete_schedule(index):
         schedule_id = index  # Using 'index' param for backward compatibility
         
         # Delete from database
-        from database import delete_schedule as db_delete_schedule
+        from modules.database import delete_schedule as db_delete_schedule
         if db_delete_schedule(schedule_id, user_id):
             flash('Schedule deleted successfully!', 'success')
         else:
@@ -1002,7 +1000,7 @@ def stream_keys():
     user_id = int(current_user.id)
     tokens = get_token_files(user_id)
     # Get current stream mapping from database
-    from database import get_stream_mappings
+    from modules.database import get_stream_mappings
     stream_mapping = get_stream_mappings(user_id)
     return render_template('stream_keys.html', tokens=tokens, stream_mapping=stream_mapping)
 
@@ -1010,7 +1008,7 @@ def stream_keys():
 @app.route('/manage_streams')
 @login_required
 def manage_streams():
-    from database import get_stream_mappings
+    from modules.database import get_stream_mappings
     user_id = int(current_user.id)
     stream_mapping = get_stream_mappings(user_id)
     return render_template('manage_streams.html', stream_mapping=stream_mapping)
@@ -1019,7 +1017,7 @@ def manage_streams():
 @app.route('/delete_stream_mapping', methods=['POST'])
 @login_required
 def delete_stream_mapping():
-    from database import delete_stream_mapping as db_delete_stream_mapping
+    from modules.database import delete_stream_mapping as db_delete_stream_mapping
     
     user_id = int(current_user.id)
     token_file = request.form.get('token_file')
@@ -1037,7 +1035,7 @@ def delete_stream_mapping():
 @app.route('/delete_token_mapping', methods=['POST'])
 @login_required
 def delete_token_mapping():
-    from database import delete_token_mappings
+    from modules.database import delete_token_mappings
     
     user_id = int(current_user.id)
     token_file = request.form.get('token_file')
@@ -1054,7 +1052,7 @@ def delete_token_mapping():
 @app.route('/export_stream_mapping', methods=['POST'])
 @login_required
 def export_stream_mapping():
-    from database import get_stream_mappings
+    from modules.database import get_stream_mappings
     
     user_id = int(current_user.id)
     try:
@@ -1072,8 +1070,8 @@ def export_stream_mapping():
 @login_required
 @demo_readonly
 def fetch_stream_keys():
-    from kunci import get_stream_keys
-    from database import save_stream_mapping
+    from modules.youtube.kunci import get_stream_keys
+    from modules.database import save_stream_mapping
     
     user_id = int(current_user.id)
     token_file = request.form.get('token_file')
@@ -1124,8 +1122,8 @@ def fetch_stream_keys():
 @login_required
 def create_new_stream():
     """Create a new stream key in YouTube Studio"""
-    from kunci import get_youtube_service
-    from database import save_stream_mapping
+    from modules.youtube.kunci import get_youtube_service
+    from modules.database import save_stream_mapping
     
     user_id = int(current_user.id)
     stream_title = request.form.get('stream_title', '').strip()
@@ -1288,7 +1286,7 @@ def get_current_user_usage():
     if not current_user.is_authenticated:
         return None
     
-    from user_limits import get_user_limits
+    from modules.auth import get_user_limits
     try:
         user_id = int(current_user.id)
         limits = get_user_limits(user_id)
@@ -1536,7 +1534,7 @@ def video_gallery():
 @demo_readonly
 def upload_video():
     # Check storage limit before upload
-    from user_limits import can_user_upload
+    from modules.auth import can_user_upload
     
     user_id = int(current_user.id)
     files = request.files.getlist('video_files')
@@ -1573,7 +1571,7 @@ def upload_video():
     
     uploaded_count = 0
     failed_count = 0
-    from database_helpers import add_video_to_db
+    from modules.database import add_video_to_db
     
     for file in files:
         if file.filename == '':
@@ -1590,8 +1588,12 @@ def upload_video():
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
                 file.save(file_path)
                 
+                # Use original filename as title (without extension)
+                video_title = original_filename.rsplit('.', 1)[0]
+                
                 # Generate thumbnail from first frame
                 thumbnail_filename = None
+                thumbnail_id = None
                 try:
                     thumbnail_filename = f"{uuid.uuid4()}.jpg"
                     thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
@@ -1603,15 +1605,28 @@ def upload_video():
                         '-ss', '00:00:01',
                         '-vframes', '1',
                         '-q:v', '2',
+                        '-y',  # Overwrite
                         thumbnail_path
                     ]
-                    subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
+                    result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
+                    
+                    # If successful, add to thumbnail database
+                    if result.returncode == 0 and os.path.exists(thumbnail_path):
+                        from modules.database import add_thumbnail
+                        thumbnail_title = f"Auto: {video_title[:50]}"
+                        thumbnail_id = str(uuid.uuid4())
+                        add_thumbnail(user_id, {
+                            'id': thumbnail_id,
+                            'filename': thumbnail_filename,
+                            'title': thumbnail_title,
+                            'original_filename': f"{video_title[:50]}.jpg"
+                        })
+                        logging.info(f"✓ Auto-generated thumbnail: {thumbnail_filename} for user {user_id}")
+                    else:
+                        thumbnail_filename = None
                 except Exception as e:
                     logging.error(f"Could not generate thumbnail for {original_filename}: {e}")
                     thumbnail_filename = None
-                
-                # Use original filename as title (without extension)
-                video_title = original_filename.rsplit('.', 1)[0]
                 
                 # Add to database using proper function
                 video_data = {
@@ -1702,7 +1717,7 @@ def import_from_drive():
                 f.write(chunk)
         
         # Add to database
-        from database_helpers import add_video_to_db
+        from modules.database import add_video_to_db
         video_data = {
             'id': str(uuid.uuid4()),  # Generate unique ID
             'title': video_title,
@@ -1746,7 +1761,7 @@ def delete_video(video_id):
                 os.remove(thumbnail_path)
         
         # Remove from database
-        from database_helpers import delete_video_from_db
+        from modules.database import delete_video_from_db
         delete_video_from_db(video_id)  # ✅ Deletes from database properly
         
         flash('Video deleted successfully!', 'success')
@@ -1792,7 +1807,7 @@ def upload_thumbnail():
         
         # Add to database
         thumbnail_title = request.form.get('thumbnail_title', 'Untitled Thumbnail')
-        from database_helpers import add_thumbnail_to_db
+        from modules.database import add_thumbnail_to_db
         thumbnail_data = {
             'id': str(uuid.uuid4()),  # Generate unique ID
             'title': thumbnail_title,
@@ -1828,7 +1843,7 @@ def delete_thumbnail(thumbnail_id):
             os.remove(file_path)
         
         # Remove from database
-        from database_helpers import delete_thumbnail_from_db
+        from modules.database import delete_thumbnail_from_db
         delete_thumbnail_from_db(thumbnail_id)  # ✅ Deletes from database properly
         
         flash('Thumbnail deleted successfully!', 'success')
@@ -1893,7 +1908,7 @@ def edit_live_stream(stream_id):
         return redirect(url_for('live_streams'))
     
     user_id = int(current_user.id)
-    from database import get_live_stream_by_id, update_live_stream
+    from modules.database import get_live_stream_by_id, update_live_stream
     
     # Get stream from database
     stream_to_edit = get_live_stream_by_id(stream_id, user_id)
@@ -1948,7 +1963,7 @@ def edit_live_stream(stream_id):
 @demo_readonly
 def add_live_stream():
     # Check stream limit before adding
-    from user_limits import can_user_add_stream
+    from modules.auth import can_user_add_stream
     
     user_id = int(current_user.id)
     can_add, message = can_user_add_stream(user_id)
@@ -1981,7 +1996,7 @@ def add_live_stream():
     # Map form fields to database fields:
     # rtmp_server → server_type
     # custom_rtmp → stream_url
-    from database_helpers import add_live_stream_to_db
+    from modules.database import add_live_stream_to_db
     
     stream_data = {
         'id': str(uuid.uuid4()),
@@ -2047,7 +2062,7 @@ def cancel_live_stream(stream_id):
     action = request.args.get('action', 'stop')  # Default action is stop
     
     # Get stream from database
-    from database import get_live_stream_by_id, delete_live_stream, update_live_stream
+    from modules.database import get_live_stream_by_id, delete_live_stream, update_live_stream
     stream = get_live_stream_by_id(stream_id)
     
     if not stream:
@@ -2121,7 +2136,7 @@ def admin_users():
     users = list_users()
     
     # Get user limits data for the limits tab
-    from user_limits import get_all_users_with_limits
+    from modules.auth import get_all_users_with_limits
     user_limits = get_all_users_with_limits()
     
     return render_template('admin_users_with_limits.html', users=users, user_limits=user_limits)
@@ -2136,7 +2151,7 @@ def schedules():
         user_id = int(current_user.id)
         
         # Get schedules from database (user-specific)
-        from database import get_schedules_by_user
+        from modules.database import get_schedules_by_user
         db_schedules = get_schedules_by_user(user_id)
         
         # Convert to format compatible with templates
@@ -2195,7 +2210,7 @@ def schedules():
 def add_schedule():
     """Add schedule to database - PER USER"""
     # Check stream/schedule limit
-    from user_limits import can_user_add_stream
+    from modules.auth import can_user_add_stream
     
     user_id = int(current_user.id)
     can_add, message = can_user_add_stream(user_id)
@@ -2223,7 +2238,7 @@ def add_schedule():
             thumbnail_file = f'thumbnails/{thumbnail_file}'
         
         # Insert into database instead of Excel
-        from database import add_schedule
+        from modules.database import add_schedule
         schedule_data = {
             'title': data['title'],
             'description': data.get('description', ''),
@@ -2293,8 +2308,8 @@ def run_schedule_now(index):
         repeat_daily = bool(row.get('repeat_daily', False))
         
         # Import scheduler functions
-        from live import schedule_live_stream
-        from kunci import get_youtube_service
+        from modules.youtube.live import schedule_live_stream
+        from modules.youtube.kunci import get_youtube_service
         
         # Get YouTube service
         youtube = get_youtube_service(token_file)
@@ -2512,14 +2527,14 @@ def delete_token():
 
 def check_and_run_schedules():
     """Check if any schedules should be run now"""
-    import live
+    # import live (now using modules.youtube.live)
     current_time = datetime.now(pytz.timezone(TIMEZONE))
     times = load_schedule_times()
     current_time_str = current_time.strftime('%H:%M')
     
     if current_time_str in times:
         try:
-            live.main()  # Run the scheduler
+            from modules.youtube import live; live.main()  # Run the scheduler
             status = {
                 'last_run': current_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'next_check': (current_time + pd.Timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S'),
@@ -2582,7 +2597,7 @@ def run_scheduler():
     """Run scheduler manually - PER USER"""
     user_id = int(current_user.id)
     try:
-        import live
+        from modules.youtube import live
         live.main()  # Run scheduler directly
         
         # Update status
@@ -2751,7 +2766,7 @@ def load_gemini_config(user_id=None):
     # Per-user configuration from database
     if user_id:
         try:
-            from database import get_db_connection
+            from modules.database import get_db_connection
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -2823,7 +2838,7 @@ def get_auto_upload_config(user_id=None):
     # Per-user configuration from database
     if user_id:
         try:
-            from database import get_db_connection
+            from modules.database import get_db_connection
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -2857,7 +2872,7 @@ def save_auto_upload_config(config, user_id=None):
     # Per-user configuration to database
     if user_id:
         try:
-            from database import get_db_connection
+            from modules.database import get_db_connection
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -2936,10 +2951,12 @@ def start_video_looping():
         looped_videos.append(looped_entry)
         
         # Start looping process in background thread
-        def loop_video_background(entry, original_file):
+        def loop_video_background(entry, original_file, current_user_id):
             try:
                 input_path = os.path.join(VIDEO_FOLDER, original_file)
-                output_filename = f"looped_{looped_id}.mp4"
+                # Use original filename with loop_ prefix
+                original_name = os.path.splitext(original_file)[0]
+                output_filename = f"loop_{original_name}.mp4"
                 output_path = os.path.join(LOOPED_FOLDER, output_filename)
                 
                 # Calculate loop duration in seconds
@@ -2967,11 +2984,46 @@ def start_video_looping():
                 stdout, stderr = process.communicate()
                 
                 if process.returncode == 0:
-                    # Success - update entry
+                    # Success - generate thumbnail and update entry
+                    thumbnail_generated = False
+                    try:
+                        # Generate thumbnail from looped video
+                        thumbnail_filename = f"{uuid.uuid4()}.jpg"
+                        thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_filename)
+                        
+                        thumb_cmd = [
+                            'ffmpeg',
+                            '-i', output_path,
+                            '-ss', '00:00:01',
+                            '-vframes', '1',
+                            '-q:v', '2',
+                            '-y',
+                            thumbnail_path
+                        ]
+                        thumb_result = subprocess.run(thumb_cmd, capture_output=True, timeout=30)
+                        
+                        if thumb_result.returncode == 0 and os.path.exists(thumbnail_path):
+                            from modules.database import add_thumbnail
+                            thumbnail_title = f"Auto: {entry['original_title'][:50]} (Looped)"
+                            thumbnail_id = str(uuid.uuid4())
+                            add_thumbnail(current_user_id, {
+                                'id': thumbnail_id,
+                                'filename': thumbnail_filename,
+                                'title': thumbnail_title,
+                                'original_filename': f"{entry['original_title'][:50]}_looped.jpg"
+                            })
+                            thumbnail_generated = True
+                            entry['thumbnail'] = thumbnail_filename  # Save thumbnail filename
+                            logging.info(f"✓ Auto-generated thumbnail for looped video: {thumbnail_filename} user {current_user_id}")
+                    except Exception as thumb_err:
+                        logging.error(f"Could not generate thumbnail for looped video: {thumb_err}")
+                    
                     entry['status'] = 'completed'
                     entry['progress'] = 100
                     entry['output_filename'] = output_filename
                     entry['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    if 'thumbnail' not in entry:
+                        entry['thumbnail'] = None  # Ensure field exists
                 else:
                     # Failed
                     entry['status'] = 'failed'
@@ -2979,15 +3031,36 @@ def start_video_looping():
                 
                 save_looped_videos(looped_videos)
                 
+                # Also update database
+                try:
+                    update_looped_video_in_db(entry['id'], {
+                        'status': entry['status'],
+                        'progress': entry['progress'],
+                        'output_filename': entry.get('output_filename'),
+                        'completed_at': entry.get('completed_at'),
+                        'thumbnail': entry.get('thumbnail')
+                    })
+                except Exception as db_err:
+                    logging.error(f"Failed to update looped video in DB: {db_err}")
+                
             except Exception as e:
                 entry['status'] = 'failed'
                 entry['error'] = str(e)
                 save_looped_videos(looped_videos)
+                
+                # Update database
+                try:
+                    update_looped_video_in_db(entry['id'], {
+                        'status': 'failed',
+                        'error': str(e)
+                    })
+                except Exception as db_err:
+                    logging.error(f"Failed to update looped video error in DB: {db_err}")
         
         # Start background thread
         thread = threading.Thread(
             target=loop_video_background,
-            args=(looped_entry, video['filename'])
+            args=(looped_entry, video['filename'], user_id)
         )
         thread.daemon = True
         thread.start()
@@ -3088,7 +3161,7 @@ def gemini_settings():
         custom_prompt = request.form.get('custom_prompt', '').strip()
         
         # Save to database
-        from database import get_db_connection
+        from modules.database import get_db_connection
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -3112,9 +3185,12 @@ def gemini_settings():
 @login_required
 def bulk_scheduling():
     """Bulk scheduling page with AI metadata generation"""
+    # Get looped videos
     looped_videos = get_looped_videos()
-    # Only show completed looped videos
-    completed_videos = [v for v in looped_videos if v['status'] == 'completed']
+    completed_looped = [v for v in looped_videos if v['status'] == 'completed']
+    
+    # Get regular videos (non-looped)
+    regular_videos = get_video_database()
     
     # Get tokens (per-user)
     user_id = int(current_user.id)
@@ -3130,7 +3206,8 @@ def bulk_scheduling():
     metadata_count = len(get_metadata_from_excel())
     
     return render_template('bulk_scheduling.html', 
-                         videos=completed_videos,
+                         looped_videos=completed_looped,
+                         regular_videos=regular_videos,
                          tokens=tokens,
                          thumbnails=thumbnails,
                          stream_mapping=stream_mapping,
@@ -3165,15 +3242,44 @@ def generate_ai_metadata():
         model_name = gemini_config.get('model', 'gemini-2.5-flash')
         model = genai.GenerativeModel(model_name)
         
+        # Get both regular and looped videos
+        regular_videos = get_video_database()
         looped_videos = get_looped_videos()
+        completed_looped = [v for v in looped_videos if v['status'] == 'completed']
+        
         generated_metadata = []
         
         for idx, video_id in enumerate(video_ids, 1):
-            video = next((v for v in looped_videos if v['id'] == video_id), None)
+            # Check if it's a regular or looped video
+            video = None
+            video_type = 'regular'
+            
+            # Parse video_id (format: "regular_xxx" or "looped_xxx")
+            if video_id.startswith('regular_'):
+                actual_id = video_id.replace('regular_', '')
+                video = next((v for v in regular_videos if v['id'] == actual_id), None)
+                video_type = 'regular'
+            elif video_id.startswith('looped_'):
+                actual_id = video_id.replace('looped_', '')
+                video = next((v for v in completed_looped if v['id'] == actual_id), None)
+                video_type = 'looped'
+            else:
+                # Legacy format without prefix
+                video = next((v for v in looped_videos if v['id'] == video_id), None)
+                if not video:
+                    video = next((v for v in regular_videos if v['id'] == video_id), None)
+            
             if not video:
+                logging.warning(f"Video not found: {video_id}")
                 continue
             
             # Generate prompt for Gemini
+            # Get video title (handle both regular and looped videos)
+            if video_type == 'looped':
+                video_title = video.get('original_title', 'Unknown')
+            else:
+                video_title = video.get('title', 'Unknown')
+            
             # Use custom prompt if available
             custom_prompt = gemini_config.get('custom_prompt')
             
@@ -3181,12 +3287,12 @@ def generate_ai_metadata():
                 # Replace placeholders in custom prompt
                 prompt = custom_prompt.replace('{keyword}', keyword)
                 prompt = prompt.replace('{index}', str(idx))
-                prompt = prompt.replace('{original_title}', video.get('original_title', 'Unknown'))
+                prompt = prompt.replace('{original_title}', video_title)
             else:
                 # Default prompt
                 prompt = f"""Generate YouTube video metadata for video #{idx} based on the keyword: "{keyword}"
 
-Original video title: {video.get('original_title', 'Unknown')}
+Original video title: {video_title}
 
 Please provide:
 1. A catchy YouTube title (max 100 characters)
@@ -3329,7 +3435,7 @@ def upload_metadata_excel():
 @demo_readonly
 def save_bulk_upload_queue_route():
     """Save videos to upload queue with metadata - PER USER"""
-    from database import add_bulk_upload_item, get_looped_videos
+    from modules.database import add_bulk_upload_item, get_looped_videos
     
     user_id = int(current_user.id)
     data = request.get_json()
@@ -3390,7 +3496,7 @@ def save_bulk_upload_queue_route():
 @login_required
 def bulk_upload_queue_page():
     """View upload queue - PER USER"""
-    from database import get_bulk_upload_queue
+    from modules.database import get_bulk_upload_queue
     
     user_id = int(current_user.id)
     queue = get_bulk_upload_queue(user_id)
@@ -3406,7 +3512,7 @@ def bulk_upload_queue_page():
 @demo_readonly
 def start_bulk_upload():
     """Start uploading all queued videos to YouTube - PER USER"""
-    from database import get_bulk_upload_queue
+    from modules.database import get_bulk_upload_queue
     
     user_id = int(current_user.id)
     queue = get_bulk_upload_queue(user_id)
@@ -3418,7 +3524,7 @@ def start_bulk_upload():
     
     # Start upload process in background
     def upload_videos_background():
-        from kunci import get_youtube_service
+        from modules.youtube.kunci import get_youtube_service
         from googleapiclient.http import MediaFileUpload
         
         for item in queued_items:
@@ -3602,7 +3708,7 @@ def api_upload_queue_status():
 @demo_readonly
 def delete_queue_item(item_id):
     """Delete item from upload queue - PER USER"""
-    from database import delete_bulk_upload_item
+    from modules.database import delete_bulk_upload_item
     
     user_id = int(current_user.id)
     
@@ -3618,7 +3724,7 @@ def delete_queue_item(item_id):
 @demo_readonly
 def clear_completed_queue():
     """Clear all completed items from queue - PER USER"""
-    from database import get_bulk_upload_queue, delete_bulk_upload_item
+    from modules.database import get_bulk_upload_queue, delete_bulk_upload_item
     
     user_id = int(current_user.id)
     queue = get_bulk_upload_queue(user_id)
@@ -3730,7 +3836,7 @@ def auto_upload_scheduler():
     """Background thread that automatically uploads videos based on schedule - PER USER"""
     while True:
         try:
-            from database import get_all_users, get_bulk_upload_queue, update_bulk_upload_item
+            from modules.database import get_all_users, get_bulk_upload_queue, update_bulk_upload_item
             
             # Update status: Running
             current_time = datetime.now(pytz.timezone(TIMEZONE))
@@ -3801,7 +3907,7 @@ def auto_upload_scheduler():
                             logging.info(f"[AUTO-UPLOAD][{username}] Scheduled publish: {item['scheduled_publish_time']}")
                             
                             # Upload the video (reuse existing upload logic)
-                            from kunci import get_youtube_service
+                            from modules.youtube.kunci import get_youtube_service
                             from googleapiclient.http import MediaFileUpload
                             
                             # Mark as uploading
@@ -3861,7 +3967,7 @@ def auto_upload_scheduler():
                         
                             # Upload thumbnail if specified
                             if item.get('thumbnail_id'):
-                                from database import get_thumbnails
+                                from modules.database import get_thumbnails
                                 thumbnails = get_thumbnails(user_id)
                                 thumbnail = next((t for t in thumbnails if t['id'] == item['thumbnail_id']), None)
                                 if thumbnail:
@@ -3934,6 +4040,24 @@ def auto_upload_scheduler():
 
 # User limits routes removed - now integrated in admin_users page
 
+@app.route('/admin/users/update_limits', methods=['POST'])
+@login_required
+@require_admin
+def admin_update_limits():
+    """Update user limits"""
+    user_id = int(request.form.get('user_id'))
+    max_streams = int(request.form.get('max_streams', 0))
+    max_storage_mb = int(request.form.get('max_storage_mb', 0))
+    
+    success = update_user_limits(user_id, max_streams, max_storage_mb)
+    
+    if success:
+        flash(f'User limits updated successfully!', 'success')
+    else:
+        flash('Failed to update limits (cannot modify admin users)', 'error')
+    
+    return redirect(url_for('admin_users'))
+
 @app.route('/admin/users/reset_usage', methods=['POST'])
 @login_required
 @require_admin
@@ -3942,7 +4066,7 @@ def admin_reset_usage():
     user_id = int(request.form.get('user_id'))
     
     try:
-        from database import get_db_connection
+        from modules.database import get_db_connection
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
@@ -4001,7 +4125,7 @@ def admin_reset_usage():
 @login_required
 def client_secret_settings():
     """YouTube API settings page"""
-    from client_secret_manager import get_client_secret_info, list_user_tokens
+    from modules.services.client_secret_manager import get_client_secret_info, list_user_tokens
     
     user_id = int(current_user.id)
     client_info = get_client_secret_info(user_id)
@@ -4015,7 +4139,7 @@ def client_secret_settings():
 @login_required
 def upload_client_secret():
     """Upload client_secret.json for current user"""
-    from client_secret_manager import set_user_client_secret
+    from modules.services.client_secret_manager import set_user_client_secret
     
     if 'client_secret' not in request.files:
         flash('No file uploaded', 'error')
@@ -4041,7 +4165,7 @@ def upload_client_secret():
 @login_required
 def delete_client_secret():
     """Delete client_secret for current user"""
-    from client_secret_manager import delete_user_client_secret
+    from modules.services.client_secret_manager import delete_user_client_secret
     
     user_id = int(current_user.id)
     success, message = delete_user_client_secret(user_id)
@@ -4067,6 +4191,32 @@ if __name__ == '__main__':
     auto_scheduler_thread = threading.Thread(target=auto_upload_scheduler, daemon=True)
     auto_scheduler_thread.start()
     logging.info("[AUTO-UPLOAD] Auto upload scheduler thread started")
+    
+    # Start daily license check thread
+    def daily_license_check():
+        """Background thread to check license validity daily"""
+        import time
+        
+        while True:
+            try:
+                # Sleep for 24 hours
+                time.sleep(24 * 60 * 60)
+                
+                logging.info("[LICENSE] Running daily license verification...")
+                validator = LicenseValidator()
+                valid, message, days = validator.verify_license(force_online=True)
+                
+                if valid:
+                    logging.info(f"[LICENSE] ✓ License valid: {days} days remaining")
+                else:
+                    logging.warning(f"[LICENSE] ✗ License invalid: {message}")
+                    
+            except Exception as e:
+                logging.error(f"[LICENSE] Daily check error: {e}")
+    
+    license_thread = threading.Thread(target=daily_license_check, daemon=True)
+    license_thread.start()
+    logging.info("[LICENSE] Daily license check thread started")
 
     # Start Flask with debug mode to show detailed errors
     app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)

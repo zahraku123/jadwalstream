@@ -46,24 +46,35 @@
             {% if videos %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                 {% for video in videos %}
-                <div class="glass-panel rounded-lg p-4 border border-dark-border hover:border-pink-500/50 transition-all">
-                    <div class="flex items-start space-x-3">
-                        <input type="checkbox" 
-                               name="video_ids[]" 
-                               value="{{ video.id }}" 
-                               id="video_{{ video.id }}"
-                               class="mt-1 h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-600 rounded bg-dark-card">
-                        <label for="video_{{ video.id }}" class="flex-1 cursor-pointer">
-                            <div class="flex items-center mb-2">
+                <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-pink-500/50 transition-all">
+                    <!-- Video Preview -->
+                    <div class="relative">
+                        <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                            <source src="{{ url_for('serve_video', filename=video.filename) }}#t=0.5">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="absolute top-2 left-2">
+                            <input type="checkbox" 
+                                   name="video_ids[]" 
+                                   value="{{ video.id }}" 
+                                   id="video_{{ video.id }}"
+                                   class="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-600 rounded bg-dark-card/80 cursor-pointer">
+                        </div>
+                    </div>
+                    
+                    <!-- Video Info -->
+                    <div class="p-3">
+                        <label for="video_{{ video.id }}" class="cursor-pointer">
+                            <div class="flex items-center mb-1">
                                 <i class="fas fa-film text-cyan-400 mr-2"></i>
-                                <h3 class="font-medium text-slate-200 line-clamp-2">{{ video.title }}</h3>
+                                <h3 class="font-medium text-slate-200 text-sm line-clamp-1">{{ video.title }}</h3>
                             </div>
-                            <p class="text-xs text-slate-400">
+                            <p class="text-xs text-slate-400 truncate">
                                 <i class="fas fa-file mr-1"></i>
                                 {{ video.filename }}
                             </p>
                             <p class="text-xs text-slate-500 mt-1">
-                                Added: {{ video.date_added }}
+                                {{ video.date_added }}
                             </p>
                         </label>
                     </div>
