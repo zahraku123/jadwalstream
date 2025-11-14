@@ -93,9 +93,9 @@ def process_schedule(schedule):
         
         logging.info(f"[SCHEDULE {schedule_id}] Using token: {token_path}")
         
-        # Get YouTube service
+        # Get YouTube service using the full token path
         try:
-            youtube = get_youtube_service(token_file)
+            youtube = get_youtube_service(token_path)
         except Exception as e:
             error_msg = f"Failed to authenticate with token: {str(e)}"
             logging.error(f"[SCHEDULE {schedule_id}] {error_msg}")
@@ -116,7 +116,7 @@ def process_schedule(schedule):
             made_for_kids=False,
             use_existing_stream=bool(stream_name),
             streamNameExisting=stream_name if stream_name else None,
-            token_file=token_file
+            token_file=token_path  # Use full path with user folder
         )
         
         broadcast_link = f"https://studio.youtube.com/video/{broadcast_id}/livestreaming"
