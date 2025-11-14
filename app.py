@@ -2582,22 +2582,28 @@ def delete_token():
     return redirect(url_for('tokens'))
 
 def check_and_run_schedules():
-    """Check if any schedules should be run now"""
-    # import live (now using modules.youtube.live)
+    """Check if any schedules should be run now and process pending schedules from database"""
     current_time = datetime.now(pytz.timezone(TIMEZONE))
     times = load_schedule_times()
     current_time_str = current_time.strftime('%H:%M')
     
+    # Check if current time matches any scheduled time
     if current_time_str in times:
         try:
-            from modules.youtube import live; live.main()  # Run the scheduler
+            # Process schedules from database using jadwal module
+            from modules.youtube.jadwal import run_scheduler
+            
+            logging.info(f"[AUTO-SCHEDULER] Triggered at {current_time_str}")
+            run_scheduler()  # Process all pending schedules from database
+            
             status = {
                 'last_run': current_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'next_check': (current_time + pd.Timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S'),
-                'last_status': 'Success',
+                'last_status': 'Success - Processed pending schedules',
                 'active': True
             }
         except Exception as e:
+            logging.error(f"[AUTO-SCHEDULER] Error: {e}")
             status = {
                 'last_run': current_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'next_check': (current_time + pd.Timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S'),
