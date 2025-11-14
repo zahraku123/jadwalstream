@@ -560,13 +560,20 @@ def stop_ffmpeg_stream(stream_id):
         del live_processes[stream_id]
         print(f"[STOP] ✓ Removed stream {stream_id} from live_processes dict")
     
-    # Update stream status
+    # Update stream status in database
+    from modules.database import get_live_stream_by_id, update_live_stream
     streams = get_live_streams()
     for stream in streams:
         if stream['id'] == stream_id:
             print(f"[STOP] Updating stream status to 'completed'")
-            stream['status'] = 'completed'
-            stream['process_pid'] = None
+            
+            # Update in database
+            user_id = stream.get('user_id')
+            if user_id:
+                update_live_stream(stream_id, user_id, {
+                    'status': 'completed',
+                    'process_pid': None
+                })
 
             # Update Excel file to increment scheduledStartTime by 1 day
             try:
@@ -615,7 +622,7 @@ def stop_ffmpeg_stream(stream_id):
             
             break
     
-    save_live_streams(streams)
+    # No need to save - already updated in database
     print(f"[STOP] ✓ Stream {stream_id} stop completed successfully")
     return True
 
@@ -4222,7 +4229,53 @@ def delete_client_secret():
     return jsonify({'success': success, 'message': message})
 
 
+def cleanup_ffmpeg_processes():
+    """Cleanup all running ffmpeg processes on app shutdown"""
+    print("[CLEANUP] Stopping all running FFmpeg processes...")
+    
+    # Kill all processes in live_processes dict
+    for stream_id, process in list(live_processes.items()):
+        try:
+            if process and process.poll() is None:
+                print(f"[CLEANUP] Terminating process for stream {stream_id} (PID: {process.pid})")
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except:
+                    process.kill()
+        except Exception as e:
+            print(f"[CLEANUP] Error stopping process for stream {stream_id}: {e}")
+    
+    # Find any orphaned ffmpeg processes
+    try:
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['name'] and 'ffmpeg' in proc.info['name'].lower():
+                    cmdline = proc.info.get('cmdline', [])
+                    # Check if it's our streaming process (contains rtmp)
+                    if cmdline and any('rtmp' in str(arg).lower() for arg in cmdline):
+                        print(f"[CLEANUP] Found orphaned FFmpeg process PID: {proc.pid}, terminating...")
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=3)
+                        except:
+                            proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except Exception as e:
+        print(f"[CLEANUP] Error finding orphaned processes: {e}")
+    
+    print("[CLEANUP] Cleanup completed")
+
 if __name__ == '__main__':
+    # Cleanup orphaned processes from previous crashes
+    print("[STARTUP] Cleaning up orphaned FFmpeg processes from previous sessions...")
+    cleanup_ffmpeg_processes()
+    
+    # Register cleanup handler for shutdown
+    import atexit
+    atexit.register(cleanup_ffmpeg_processes)
+    
     # Disable debug mode for production
     app.debug = False
     
