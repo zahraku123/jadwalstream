@@ -642,7 +642,11 @@ def check_scheduled_streams():
                 
                 # Update status to 'live' if stream started successfully
                 if success:
-                    stream['status'] = 'live'
+                    # Update status in database
+                    from modules.database import update_live_stream
+                    user_id = stream.get('user_id')
+                    if user_id:
+                        update_live_stream(stream['id'], user_id, {'status': 'live'})
                     print(f"Stream {stream['title']} started automatically and is now running")
                     # Hapus flash karena berjalan di luar request context
                 
@@ -675,13 +679,15 @@ def check_scheduled_streams():
                             break
                     
                     if not duplicate_exists:
-                        streams.append(new_stream)
+                        # Add to database instead of appending to streams list
+                        from modules.database import add_live_stream
+                        user_id = stream.get('user_id')
+                        if user_id:
+                            add_live_stream(user_id, new_stream)
+                            print(f"[SCHEDULER] Created next schedule for {new_stream['title']} on {new_stream['start_date']}")
                         modified = True
-                        print(f"[SCHEDULER] Created next schedule for {new_stream['title']} on {new_stream['start_date']}")
     
-    # Only save if changes were made
-    if modified:
-        save_live_streams(streams)
+    # No need to save - already updated in database
 
 # Start a background thread to check for scheduled streams
 def run_scheduler():
@@ -2060,8 +2066,10 @@ def start_live_stream_now(stream_id):
                 
                 # Start the stream immediately
                 if start_ffmpeg_stream(stream):
-                    stream['status'] = 'live'
-                    save_live_streams(streams)
+                    # Update status to 'live' in database
+                    from modules.database import update_live_stream
+                    user_id = int(current_user.id)
+                    update_live_stream(stream_id, user_id, {'status': 'live'})
                     flash('Live stream dimulai')
                     # Tambahkan log untuk debugging
                     print(f"Live stream berhasil dimulai untuk ID: {stream_id}")
