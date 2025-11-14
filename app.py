@@ -2823,19 +2823,6 @@ def save_looped_videos(looped_videos):
     with open(LOOPED_DB_FILE, 'w') as f:
         json.dump(looped_videos, f, indent=4)
 
-def get_bulk_upload_queue():
-    """Get bulk upload queue for current user from SQLite"""
-    try:
-        return get_bulk_upload_queue_data()
-    except Exception as e:
-        print(f"Error getting upload queue: {e}")
-        return []
-    try:
-        with open(BULK_UPLOAD_DB_FILE, 'r') as f:
-            return json.load(f)
-    except:
-        return []
-
 def save_bulk_upload_queue(queue):
     """DEPRECATED - use add_bulk_upload_to_db or update_bulk_upload_in_db instead"""
     pass
@@ -3526,7 +3513,10 @@ def save_bulk_upload_queue_route():
         user_id = int(current_user.id)
         data = request.get_json()
         
+        logging.info(f"[QUEUE] User {user_id} adding to queue: {data.get('videos', []).__len__() if data else 0} videos")
+        
         if not data or not data.get('videos'):
+            logging.error("[QUEUE] No data or videos in request")
             return jsonify({'success': False, 'error': 'Data tidak valid'}), 400
         
         videos = data['videos']
@@ -3544,15 +3534,49 @@ def save_bulk_upload_queue_route():
         except:
             return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
         
-        # Get looped videos database for current user
+        # Get both looped and regular videos for current user
+        from modules.database import get_videos
         looped_videos = get_looped_videos(user_id)
+        regular_videos = get_videos(user_id)
         
         added_count = 0
         for idx, video_data in enumerate(videos):
-            video_id = video_data['video_id']
-            video = next((v for v in looped_videos if v['id'] == video_id), None)
-            if not video or video['status'] != 'completed':
-                continue
+            original_video_id = video_data['video_id']
+            video_type = 'regular'
+            video_id = original_video_id
+            
+            # Detect video type and clean ID
+            if original_video_id.startswith('looped_'):
+                video_type = 'looped'
+                video_id = original_video_id.replace('looped_', '', 1)
+            elif original_video_id.startswith('regular_'):
+                video_type = 'regular'
+                video_id = original_video_id.replace('regular_', '', 1)
+            
+            logging.info(f"[QUEUE] Processing {video_type} video_id: {video_id}")
+            
+            # Find video based on type
+            video = None
+            video_path = None
+            
+            if video_type == 'looped':
+                video = next((v for v in looped_videos if v['id'] == video_id), None)
+                if video and video['status'] == 'completed':
+                    video_path = os.path.join(LOOPED_FOLDER, video['output_filename'])
+                else:
+                    logging.warning(f"[QUEUE] Looped video {video_id} not found or not completed - skipping")
+                    continue
+            else:
+                # Regular video
+                video = next((v for v in regular_videos if v['id'] == video_id), None)
+                if video:
+                    # Construct path from filename
+                    video_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos', video['filename'])
+                else:
+                    logging.warning(f"[QUEUE] Regular video {video_id} not found - skipping")
+                    continue
+            
+            logging.info(f"[QUEUE] Video found: {video.get('title') or video.get('original_title')}")
             
             # Calculate publish date (increment by 1 day for each video)
             publish_date = start_date + timedelta(days=idx)
@@ -3560,7 +3584,7 @@ def save_bulk_upload_queue_route():
             queue_entry = {
                 'id': str(uuid.uuid4()),
                 'video_id': video_id,
-                'video_path': os.path.join(LOOPED_FOLDER, video['output_filename']),
+                'video_path': video_path,
                 'title': video_data['title'],
                 'description': video_data['description'],
                 'tags': video_data['tags'].split(',') if isinstance(video_data['tags'], str) else video_data['tags'],
@@ -3573,9 +3597,12 @@ def save_bulk_upload_queue_route():
             }
             
             # Add to database
-            add_bulk_upload_item(user_id, queue_entry)
+            logging.info(f"[QUEUE] Adding video {video_id} to queue for user {user_id}")
+            result = add_bulk_upload_item(user_id, queue_entry)
+            logging.info(f"[QUEUE] Insert result: {result}")
             added_count += 1
     
+        logging.info(f"[QUEUE] Successfully added {added_count} videos to queue for user {user_id}")
         return jsonify({'success': True, 'message': f'{added_count} video ditambahkan ke antrian upload'})
     
     except Exception as e:
@@ -3618,6 +3645,7 @@ def start_bulk_upload():
     def upload_videos_background():
         from modules.youtube.kunci import get_youtube_service
         from googleapiclient.http import MediaFileUpload
+        from modules.database import update_bulk_upload_item
         
         for item in queued_items:
             try:
@@ -3625,9 +3653,10 @@ def start_bulk_upload():
                 video_path = item['video_path']
                 
                 if not os.path.exists(video_path):
-                    item['status'] = 'failed'
-                    item['error'] = 'File video tidak ditemukan'
-                    save_bulk_upload_queue(queue)
+                    update_bulk_upload_item(item['id'], user_id, {
+                        'status': 'failed',
+                        'error_message': 'File video tidak ditemukan'
+                    })
                     continue
                 
                 # Get video duration using ffprobe
@@ -3652,9 +3681,10 @@ def start_bulk_upload():
                     # - For safety, warn at 11.5 hours
                     
                     if duration_seconds > 41400:  # 11.5 hours
-                        item['status'] = 'failed'
-                        item['error'] = f'Video terlalu panjang ({duration_hours:.2f} jam). YouTube maksimal 12 jam untuk akun terverifikasi.'
-                        save_bulk_upload_queue(queue)
+                        update_bulk_upload_item(item['id'], user_id, {
+                            'status': 'failed',
+                            'error_message': f'Video terlalu panjang ({duration_hours:.2f} jam). YouTube maksimal 12 jam untuk akun terverifikasi.'
+                        })
                         logging.error(f"Video too long: {duration_hours:.2f} hours")
                         continue
                     
@@ -3667,11 +3697,21 @@ def start_bulk_upload():
                     # Continue anyway if ffprobe fails
                 
                 # Update status
-                item['status'] = 'uploading'
-                save_bulk_upload_queue(queue)
+                update_bulk_upload_item(item['id'], user_id, {'status': 'uploading'})
+                
+                # Get token path for per-user tokens
+                token_path = get_token_path(item['token_file'], user_id)
+                
+                if not os.path.exists(token_path):
+                    update_bulk_upload_item(item['id'], user_id, {
+                        'status': 'failed',
+                        'error_message': f'Token file not found: {item["token_file"]}'
+                    })
+                    logging.error(f"Token not found: {token_path}")
+                    continue
                 
                 # Get YouTube service
-                youtube = get_youtube_service(item['token_file'])
+                youtube = get_youtube_service(token_path)
                 
                 # Prepare video metadata
                 # Parse scheduled time and convert to UTC
@@ -3735,8 +3775,8 @@ def start_bulk_upload():
                 while response is None:
                     status, response = request.next_chunk()
                     if status:
-                        item['upload_progress'] = int(status.progress() * 100)
-                        save_bulk_upload_queue(queue)
+                        progress = int(status.progress() * 100)
+                        update_bulk_upload_item(item['id'], user_id, {'upload_progress': progress})
                 
                 video_id = response['id']
                 item['youtube_video_id'] = video_id
@@ -3754,31 +3794,58 @@ def start_bulk_upload():
                             ).execute()
                 
                 # Update status to completed
-                item['status'] = 'completed'
-                item['completed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                item['video_url'] = f'https://studio.youtube.com/video/{video_id}/edit'
-                save_bulk_upload_queue(queue)
+                update_bulk_upload_item(item['id'], user_id, {
+                    'status': 'completed',
+                    'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'youtube_video_id': video_id
+                })
+                
+                # Send Telegram notification (success)
+                try:
+                    from modules.services import telegram_notifier
+                    telegram_notifier.notify_upload_success(
+                        title=item['title'],
+                        youtube_video_id=video_id,
+                        scheduled_time=item['scheduled_publish_time'],
+                        user_id=user_id
+                    )
+                except Exception as e:
+                    logging.error(f"[TELEGRAM] Failed to send upload success notification: {e}")
                 
             except Exception as e:
                 error_message = str(e)
-                item['status'] = 'failed'
                 
                 # Better error messages for common YouTube API errors
                 if 'exceeded the number of videos they may upload' in error_message:
-                    item['error'] = '❌ YouTube Daily Quota Exceeded: You have reached the maximum number of uploads per day (default: 6 videos/24h). Wait 24 hours or request quota increase at https://support.google.com/youtube/contact/yt_api_form'
+                    error = '❌ YouTube Daily Quota Exceeded: You have reached the maximum number of uploads per day (default: 6 videos/24h). Wait 24 hours or request quota increase at https://support.google.com/youtube/contact/yt_api_form'
                 elif 'uploadLimitExceeded' in error_message:
-                    item['error'] = '❌ Video too long for unverified account. Verify your YouTube account at https://www.youtube.com/verify or reduce video length to under 15 minutes.'
+                    error = '❌ Video too long for unverified account. Verify your YouTube account at https://www.youtube.com/verify or reduce video length to under 15 minutes.'
                 elif 'quotaExceeded' in error_message:
-                    item['error'] = '❌ YouTube API Quota Exceeded: Daily API call limit reached. Wait until quota resets (midnight Pacific Time) or request increase.'
+                    error = '❌ YouTube API Quota Exceeded: Daily API call limit reached. Wait until quota resets (midnight Pacific Time) or request increase.'
                 elif 'forbidden' in error_message.lower():
-                    item['error'] = '❌ Permission Error: Check your YouTube API credentials and OAuth token. Token may have expired.'
+                    error = '❌ Permission Error: Check your YouTube API credentials and OAuth token. Token may have expired.'
                 elif 'invalidVideoMetadata' in error_message:
-                    item['error'] = '❌ Invalid Metadata: Check title length (<100 chars), description, and tags format.'
+                    error = '❌ Invalid Metadata: Check title length (<100 chars), description, and tags format.'
                 else:
-                    item['error'] = f'❌ Upload Failed: {error_message}'
+                    error = f'❌ Upload Failed: {error_message}'
+                
+                update_bulk_upload_item(item['id'], user_id, {
+                    'status': 'failed',
+                    'error_message': error
+                })
+                
+                # Send Telegram notification (failed)
+                try:
+                    from modules.services import telegram_notifier
+                    telegram_notifier.notify_upload_failed(
+                        title=item['title'],
+                        error_message=error,
+                        user_id=user_id
+                    )
+                except Exception as e:
+                    logging.error(f"[TELEGRAM] Failed to send upload failed notification: {e}")
                 
                 logging.error(f"Upload failed for {item['title']}: {error_message}")
-                save_bulk_upload_queue(queue)
     
     # Start background thread
     thread = threading.Thread(target=upload_videos_background)
@@ -3791,9 +3858,60 @@ def start_bulk_upload():
 @app.route('/api/upload-queue-status')
 @login_required
 def api_upload_queue_status():
-    """Get upload queue status"""
-    queue = get_bulk_upload_queue()
-    return jsonify(queue)
+    """Get upload queue status - PER USER"""
+    try:
+        from modules.database import get_bulk_upload_queue
+        
+        user_id = int(current_user.id)
+        queue = get_bulk_upload_queue(user_id)
+        return jsonify(queue)
+    except Exception as e:
+        logging.error(f"Error fetching upload queue status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/edit-queue-item/<item_id>', methods=['POST'])
+@login_required
+@demo_readonly
+def edit_queue_item(item_id):
+    """Edit item in upload queue - PER USER"""
+    from modules.database import update_bulk_upload_item
+    
+    try:
+        user_id = int(current_user.id)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Prepare updates
+        updates = {}
+        if 'title' in data:
+            updates['title'] = data['title']
+        if 'description' in data:
+            updates['description'] = data['description']
+        if 'tags' in data:
+            # Convert comma-separated string to list
+            if isinstance(data['tags'], str):
+                updates['tags'] = [tag.strip() for tag in data['tags'].split(',') if tag.strip()]
+            else:
+                updates['tags'] = data['tags']
+        if 'scheduled_publish_time' in data:
+            updates['scheduled_publish_time'] = data['scheduled_publish_time']
+        if 'privacy_status' in data:
+            updates['privacy_status'] = data['privacy_status']
+        
+        if update_bulk_upload_item(item_id, user_id, updates):
+            return jsonify({'success': True, 'message': 'Item updated successfully'})
+        else:
+            return jsonify({'success': False, 'error': 'Item not found or update failed'}), 404
+    
+    except Exception as e:
+        logging.error(f"Error editing queue item: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/delete-queue-item/<item_id>', methods=['POST'])
 @login_required

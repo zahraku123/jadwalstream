@@ -294,7 +294,17 @@
                         <!-- Video Preview -->
                         <div class="flex-shrink-0 w-48">
                             <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
-                                <source src="{{ url_for('serve_video', filename=item.video_filename) }}#t=0.5">
+                                {% if item.video_path %}
+                                    {% if 'done/' in item.video_path %}
+                                        {# Looped video #}
+                                        <source src="{{ url_for('serve_looped_video', filename=item.video_path.split('done/')[-1]) }}#t=0.5">
+                                    {% else %}
+                                        {# Regular video #}
+                                        <source src="{{ url_for('serve_video', filename=item.video_path.split('/')[-1]) }}#t=0.5">
+                                    {% endif %}
+                                {% else %}
+                                    <source src="">
+                                {% endif %}
                                 Your browser does not support the video tag.
                             </video>
                         </div>
@@ -375,19 +385,31 @@
                             {% endif %}
 
                             <!-- Error Message -->
-                            {% if item.get('error') %}
+                            {% if item.get('error_message') %}
                             <div class="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
                                 <i class="fas fa-exclamation-triangle mr-1"></i>
-                                {{ item.error[:200] }}
+                                {{ item.error_message[:200] }}
                             </div>
                             {% endif %}
                         </div>
 
                         <!-- Actions -->
-                        <div class="ml-4 flex space-x-2">
+                        <div class="ml-4 flex flex-col space-y-2">
+                            {% if item.status == 'queued' %}
+                            <button onclick="openEditModal(this)" 
+                                    data-id="{{ item.id }}"
+                                    data-title="{{ item.title }}"
+                                    data-description="{{ item.description }}"
+                                    data-tags="{% if item.tags is iterable and item.tags is not string %}{{ item.tags|join(',') }}{% else %}{{ item.tags }}{% endif %}"
+                                    data-scheduled="{{ item.scheduled_publish_time }}"
+                                    data-privacy="{{ item.privacy_status }}"
+                                    class="text-cyan-400 hover:text-cyan-300 transition-colors p-2" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            {% endif %}
                             {% if item.status in ['queued', 'failed'] %}
                             <form method="POST" action="{{ url_for('delete_queue_item', item_id=item.id) }}" onsubmit="return confirm('Delete this item from queue?')">
-                                <button type="submit" class="text-red-400 hover:text-red-300 transition-colors p-2">
+                                <button type="submit" class="text-red-400 hover:text-red-300 transition-colors p-2" title="Delete">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </form>
@@ -487,14 +509,47 @@ function autoScheduler() {
     };
 }
 
+let previousCompletedCount = 0;
+let previousFailedCount = 0;
+
 function refreshQueue() {
     fetch('{{ url_for("api_upload_queue_status") }}')
         .then(response => response.json())
         .then(data => {
+            // Check for newly completed or failed uploads
+            const currentCompleted = data.filter(item => item.status === 'completed').length;
+            const currentFailed = data.filter(item => item.status === 'failed').length;
+            
+            if (currentCompleted > previousCompletedCount) {
+                const newCompleted = currentCompleted - previousCompletedCount;
+                showNotification(`✅ ${newCompleted} video berhasil diupload!`, 'success');
+            }
+            
+            if (currentFailed > previousFailedCount) {
+                const newFailed = currentFailed - previousFailedCount;
+                showNotification(`❌ ${newFailed} video gagal diupload`, 'error');
+            }
+            
+            previousCompletedCount = currentCompleted;
+            previousFailedCount = currentFailed;
+            
             updateQueue(data);
             updateStats(data);
         })
         .catch(error => console.error('Error:', error));
+}
+
+function showNotification(message, type) {
+    const color = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 ${color} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in`;
+    notification.innerHTML = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('animate-fade-out');
+        setTimeout(() => notification.remove(), 500);
+    }, 5000);
 }
 
 function updateStats(queue) {
@@ -571,11 +626,11 @@ function updateQueue(queue) {
         }
 
         let errorMessage = '';
-        if (item.error) {
+        if (item.error_message) {
             errorMessage = `
                 <div class="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
                     <i class="fas fa-exclamation-triangle mr-1"></i>
-                    ${item.error.substring(0, 200)}
+                    ${item.error_message.substring(0, 200)}
                 </div>
             `;
         }
@@ -628,6 +683,13 @@ function updateQueue(queue) {
     container.innerHTML = html;
 }
 
+// Initialize counters on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const queueItems = document.querySelectorAll('[data-status]');
+    previousCompletedCount = Array.from(queueItems).filter(item => item.dataset.status === 'completed').length;
+    previousFailedCount = Array.from(queueItems).filter(item => item.dataset.status === 'failed').length;
+});
+
 // Auto-refresh every 5 seconds if there are uploading videos
 setInterval(() => {
     const uploadingItems = document.querySelectorAll('[data-status="uploading"]');
@@ -678,5 +740,123 @@ function queueItems() {
         }
     }
 }
+
+// Edit Queue Item Modal Functions
+function openEditModal(button) {
+    const id = button.getAttribute('data-id');
+    const title = button.getAttribute('data-title');
+    const description = button.getAttribute('data-description');
+    const tags = button.getAttribute('data-tags');
+    const scheduledTime = button.getAttribute('data-scheduled');
+    const privacy = button.getAttribute('data-privacy');
+    
+    document.getElementById('editItemId').value = id;
+    document.getElementById('editTitle').value = title;
+    document.getElementById('editDescription').value = description;
+    document.getElementById('editTags').value = tags;
+    document.getElementById('editScheduledTime').value = scheduledTime.replace(' ', 'T').substring(0, 16);
+    document.getElementById('editPrivacy').value = privacy;
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.add('hidden');
+}
+
+async function saveEdit() {
+    const itemId = document.getElementById('editItemId').value;
+    const updates = {
+        title: document.getElementById('editTitle').value,
+        description: document.getElementById('editDescription').value,
+        tags: document.getElementById('editTags').value,
+        scheduled_publish_time: document.getElementById('editScheduledTime').value.replace('T', ' ') + ':00',
+        privacy_status: document.getElementById('editPrivacy').value
+    };
+
+    try {
+        const response = await fetch(`/edit-queue-item/${itemId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updates)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('✅ Item updated successfully');
+            closeEditModal();
+            window.location.reload();
+        } else {
+            alert('❌ Error: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error updating item: ' + error.message);
+    }
+}
 </script>
+
+<!-- Edit Modal -->
+<div id="editModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="glass-panel rounded-xl max-w-2xl w-full p-6 border border-cyan-500/20">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-semibold text-white">
+                <i class="fas fa-edit text-cyan-400 mr-2"></i>
+                Edit Queue Item
+            </h3>
+            <button onclick="closeEditModal()" class="text-slate-400 hover:text-white transition-colors">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+
+        <input type="hidden" id="editItemId">
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Title</label>
+                <input type="text" id="editTitle" class="form-input w-full bg-dark-card border-dark-border text-white rounded-lg">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                <textarea id="editDescription" rows="4" class="form-input w-full bg-dark-card border-dark-border text-white rounded-lg"></textarea>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Tags (comma separated)</label>
+                <input type="text" id="editTags" class="form-input w-full bg-dark-card border-dark-border text-white rounded-lg">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Scheduled Time</label>
+                    <input type="datetime-local" id="editScheduledTime" class="form-input w-full bg-dark-card border-dark-border text-white rounded-lg">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Privacy</label>
+                    <select id="editPrivacy" class="form-select w-full bg-dark-card border-dark-border text-white rounded-lg">
+                        <option value="private">Private</option>
+                        <option value="unlisted">Unlisted</option>
+                        <option value="public">Public</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+            <button onclick="saveEdit()" class="flex-1 cyber-button primary">
+                <i class="fas fa-save mr-2"></i>
+                Save Changes
+            </button>
+            <button onclick="closeEditModal()" class="flex-1 cyber-button secondary">
+                <i class="fas fa-times mr-2"></i>
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

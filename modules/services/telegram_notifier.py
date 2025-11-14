@@ -165,7 +165,7 @@ def send_message(message, parse_mode='HTML', user_id=None):
 
 def notify_schedule_created(title, scheduled_time, broadcast_link, user_id=None):
     """
-    Notify when a schedule is successfully created
+    Notify when a schedule is successfully created (Indonesian slang style)
     
     Args:
         title (str): Schedule title
@@ -175,13 +175,13 @@ def notify_schedule_created(title, scheduled_time, broadcast_link, user_id=None)
     """
     logging.info(f"[TELEGRAM] Preparing schedule created notification for: {title} (user_id: {user_id})")
     message = f"""
-🎬 <b>Schedule Created Successfully!</b>
+🎬 <b>Jadwal Live Udah Jadi Bos!</b> 🔥
 
-📺 <b>Title:</b> {title}
-🕐 <b>Scheduled Time:</b> {scheduled_time}
-🔗 <b>Link:</b> <a href="{broadcast_link}">Open in YouTube Studio</a>
+📺 <b>Judul:</b> {title}
+🕐 <b>Jam Tayang:</b> {scheduled_time}
+🔗 <b>Link:</b> <a href="{broadcast_link}">Buka Studio</a>
 
-✅ Your stream is ready to go live!
+✅ Siap-siap go live nih! Mantap! 🚀
 """
     result = send_message(message.strip(), user_id=user_id)
     logging.info(f"[TELEGRAM] Notification result: {result}")
@@ -189,7 +189,7 @@ def notify_schedule_created(title, scheduled_time, broadcast_link, user_id=None)
 
 def notify_stream_starting(title, scheduled_time, broadcast_link, user_id=None):
     """
-    Notify when a stream is about to start
+    Notify when a stream is about to start (Indonesian slang style)
     
     Args:
         title (str): Stream title
@@ -198,39 +198,39 @@ def notify_stream_starting(title, scheduled_time, broadcast_link, user_id=None):
         user_id (int, optional): User ID for notification
     """
     message = f"""
-🚀 <b>Stream Starting Now!</b>
+🚀 <b>Live Mulai Sekarang Bro!</b> 🎬
 
-📺 <b>Title:</b> {title}
-🕐 <b>Time:</b> {scheduled_time}
-🔗 <b>Link:</b> <a href="{broadcast_link}">Open Stream</a>
+📺 <b>Judul:</b> {title}
+🕐 <b>Jam:</b> {scheduled_time}
+🔗 <b>Link:</b> <a href="{broadcast_link}">Langsung Tonton</a>
 
-🎥 Your livestream is going live!
+🎥 Stream udah on air nih, cus! 🔥
 """
     return send_message(message.strip(), user_id=user_id)
 
 def notify_stream_ended(title, duration=None, user_id=None):
     """
-    Notify when a stream has ended
+    Notify when a stream has ended (Indonesian slang style)
     
     Args:
         title (str): Stream title
         duration (str, optional): Stream duration
         user_id (int, optional): User ID for notification
     """
-    duration_text = f"\n⏱ <b>Duration:</b> {duration}" if duration else ""
+    duration_text = f"\n⏱ <b>Durasi:</b> {duration}" if duration else ""
     
     message = f"""
-🛑 <b>Stream Ended</b>
+🛑 <b>Live Udah Selesai Bos!</b> ✅
 
-📺 <b>Title:</b> {title}{duration_text}
+📺 <b>Judul:</b> {title}{duration_text}
 
-✅ Stream completed successfully!
+💯 Stream sukses abis! Keren banget! 🎉
 """
     return send_message(message.strip(), user_id=user_id)
 
 def notify_schedule_error(title, error_message, user_id=None):
     """
-    Notify when there's an error creating a schedule
+    Notify when there's an error creating a schedule (Indonesian slang style)
     
     Args:
         title (str): Schedule title
@@ -238,12 +238,55 @@ def notify_schedule_error(title, error_message, user_id=None):
         user_id (int, optional): User ID for notification
     """
     message = f"""
-❌ <b>Schedule Creation Failed</b>
+❌ <b>Waduh, Jadwal Gagal Dibuat Nih!</b> 😅
 
-📺 <b>Title:</b> {title}
-⚠️ <b>Error:</b> {error_message}
+📺 <b>Judul:</b> {title}
+⚠️ <b>Masalah:</b> {error_message}
 
-Please check the application logs for details.
+Coba cek log-nya ya bos, ada yang error! 🔧
+"""
+    return send_message(message.strip(), user_id=user_id)
+
+def notify_upload_success(title, youtube_video_id, scheduled_time, user_id=None):
+    """
+    Notify when video upload is successful (Indonesian slang style)
+    
+    Args:
+        title (str): Video title
+        youtube_video_id (str): YouTube video ID
+        scheduled_time (str): Scheduled publish time
+        user_id (int, optional): User ID for notification
+    """
+    video_url = f"https://studio.youtube.com/video/{youtube_video_id}/edit"
+    
+    message = f"""
+🔥 <b>Upload Sukses Bos!</b> 🚀
+
+🎬 <b>Judul:</b> {title}
+📹 <b>Video ID:</b> {youtube_video_id}
+🕐 <b>Publish:</b> {scheduled_time}
+🔗 <b>Link:</b> <a href="{video_url}">Cek di Studio</a>
+
+✨ Mantap jiwa! Video udah siap tayang nih! 🎉
+"""
+    return send_message(message.strip(), user_id=user_id)
+
+def notify_upload_failed(title, error_message, user_id=None):
+    """
+    Notify when video upload fails (Indonesian slang style)
+    
+    Args:
+        title (str): Video title
+        error_message (str): Error message
+        user_id (int, optional): User ID for notification
+    """
+    message = f"""
+❌ <b>Waduh, Upload Gagal Bro!</b> 😅
+
+🎬 <b>Judul:</b> {title}
+⚠️ <b>Kenapa:</b> {error_message[:200]}
+
+Coba cek lagi ya bos, mungkin ada yang kurang! 🔧
 """
     return send_message(message.strip(), user_id=user_id)
 
