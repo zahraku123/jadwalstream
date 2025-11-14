@@ -2990,6 +2990,7 @@ def video_looping():
 @demo_readonly
 def start_video_looping():
     """Start looping selected videos"""
+    user_id = int(current_user.id)
     video_ids = request.form.getlist('video_ids[]')
     loop_duration = request.form.get('loop_duration', '60')  # Default 60 minutes
     
