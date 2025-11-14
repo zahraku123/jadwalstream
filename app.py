@@ -632,6 +632,12 @@ def check_scheduled_streams():
             
             # If it's time to start the stream
             if start_time <= now:
+                # Add backward compatibility mapping before starting stream
+                if 'server_type' in stream and 'rtmp_server' not in stream:
+                    stream['rtmp_server'] = stream['server_type']
+                if 'stream_url' in stream and 'custom_rtmp' not in stream:
+                    stream['custom_rtmp'] = stream['stream_url']
+                
                 success = start_ffmpeg_stream(stream)
                 
                 # Update status to 'live' if stream started successfully
@@ -2045,6 +2051,13 @@ def start_live_stream_now(stream_id):
                 flash('Tidak dapat memulai live stream milik user lain.', 'error')
                 return redirect(url_for('live_streams'))
             if stream['status'] == 'scheduled' or stream['status'] == 'completed':
+                # Add backward compatibility mapping before starting stream
+                # server_type → rtmp_server, stream_url → custom_rtmp
+                if 'server_type' in stream and 'rtmp_server' not in stream:
+                    stream['rtmp_server'] = stream['server_type']
+                if 'stream_url' in stream and 'custom_rtmp' not in stream:
+                    stream['custom_rtmp'] = stream['stream_url']
+                
                 # Start the stream immediately
                 if start_ffmpeg_stream(stream):
                     stream['status'] = 'live'
