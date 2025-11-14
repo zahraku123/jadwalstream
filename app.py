@@ -2082,7 +2082,7 @@ def cancel_live_stream(stream_id):
     
     # Get stream from database
     from modules.database import get_live_stream_by_id, delete_live_stream, update_live_stream
-    stream = get_live_stream_by_id(stream_id)
+    stream = get_live_stream_by_id(stream_id, user_id)
     
     if not stream:
         flash('Live stream tidak ditemukan', 'error')

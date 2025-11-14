@@ -85,7 +85,10 @@
                                     <i class="fas fa-key mr-2"></i>Kunci Stream
                                 </label>
                                 {% if stream_mapping %}
-                                <select name="stream_key" required class="cyber-input">
+                                <select id="streamKeySelect" 
+                                        onchange="toggleCustomStreamKey(this.value)"
+                                        class="cyber-input"
+                                        required>
                                     <option value="">-- Select Stream Key --</option>
                                     {% for token, streams in stream_mapping.items() %}
                                         {% for stream_id, meta in streams.items() %}
@@ -96,7 +99,22 @@
                                             {% endif %}
                                         {% endfor %}
                                     {% endfor %}
+                                    <option value="custom">✏️ Custom Stream Key</option>
                                 </select>
+                                
+                                <!-- Hidden input for selected stream key -->
+                                <input type="hidden" id="hiddenStreamKey" name="stream_key" value="">
+                                
+                                <!-- Custom Stream Key Input -->
+                                <div id="customStreamKeyDiv" style="display: none;" class="mt-3">
+                                    <input type="text" 
+                                           id="customStreamKeyInput"
+                                           class="cyber-input" 
+                                           placeholder="Enter your custom stream key...">
+                                    <p class="text-xs text-cyan-400 mt-1">
+                                        <i class="fas fa-info-circle mr-1"></i>Enter your custom stream key from YouTube Studio or other platform.
+                                    </p>
+                                </div>
                                 {% else %}
                                 <input type="text" name="stream_key" required class="cyber-input" placeholder="Enter stream key manually...">
                                 <p class="text-xs text-yellow-400 mt-1">
@@ -278,6 +296,34 @@
 </div>
 
 <script>
+    // Toggle custom stream key input
+    function toggleCustomStreamKey(value) {
+        const customDiv = document.getElementById('customStreamKeyDiv');
+        const customInput = document.getElementById('customStreamKeyInput');
+        const hiddenInput = document.getElementById('hiddenStreamKey');
+        const selectElement = document.getElementById('streamKeySelect');
+        
+        if (value === 'custom') {
+            // Show custom input
+            customDiv.style.display = 'block';
+            customInput.required = true;
+            hiddenInput.value = '';
+            selectElement.removeAttribute('required');
+            
+            // Copy custom input value to hidden field on input
+            customInput.oninput = function() {
+                hiddenInput.value = this.value;
+            };
+        } else {
+            // Hide custom input
+            customDiv.style.display = 'none';
+            customInput.required = false;
+            customInput.value = '';
+            hiddenInput.value = value;
+            selectElement.setAttribute('required', 'required');
+        }
+    }
+    
     function handleVideoChange(event) {
         const selectedOption = event.target.options[event.target.selectedIndex];
         const videoFilename = event.target.value;
