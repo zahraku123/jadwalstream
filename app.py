@@ -3028,7 +3028,11 @@ def start_video_looping():
             'output_filename': None,
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
-        looped_videos.append(looped_entry)
+        
+        # Add to database
+        from modules.database import add_looped_video
+        add_looped_video(user_id, looped_entry)
+        looped_videos.append(looped_entry)  # Also keep in memory for background thread
         
         # Start looping process in background thread
         def loop_video_background(entry, original_file, current_user_id):
@@ -3109,9 +3113,7 @@ def start_video_looping():
                     entry['status'] = 'failed'
                     entry['error'] = stderr.decode('utf-8')[:500]
                 
-                save_looped_videos(looped_videos)
-                
-                # Also update database
+                # Update database
                 try:
                     update_looped_video_in_db(entry['id'], {
                         'status': entry['status'],
@@ -3126,7 +3128,6 @@ def start_video_looping():
             except Exception as e:
                 entry['status'] = 'failed'
                 entry['error'] = str(e)
-                save_looped_videos(looped_videos)
                 
                 # Update database
                 try:
@@ -3145,7 +3146,7 @@ def start_video_looping():
         thread.daemon = True
         thread.start()
     
-    save_looped_videos(looped_videos)
+    # No need to save - already added to database above
     flash(f'{len(video_ids)} video sedang diproses untuk looping', 'success')
     return redirect(url_for('video_looping'))
 
@@ -3181,8 +3182,9 @@ def delete_looped_video(video_id):
                 os.remove(file_path)
     
         # Remove from database
-        looped_videos = [v for v in looped_videos if v['id'] != video_id]
-        save_looped_videos(looped_videos)
+        from modules.database import delete_looped_video
+        user_id = int(current_user.id)
+        delete_looped_video(video_id, user_id)
         
         return jsonify({'success': True, 'message': 'Video deleted successfully'})
     except Exception as e:
@@ -3218,12 +3220,15 @@ def bulk_delete_looped_videos():
                             logging.error(f"Error deleting file {file_path}: {e}")
         
         # Remove all selected videos from database
-        looped_videos = [v for v in looped_videos if v['id'] not in video_ids]
-        save_looped_videos(looped_videos)
+        from modules.database import delete_looped_video
+        user_id = int(current_user.id)
+        
+        for video_id in video_ids:
+            delete_looped_video(video_id, user_id)
         
         return jsonify({
             'success': True, 
-            'message': f'{deleted_count} video(s) deleted successfully'
+            'message': f'{len(video_ids)} video(s) deleted successfully'
         })
     except Exception as e:
         logging.error(f"Error bulk deleting looped videos: {e}")
