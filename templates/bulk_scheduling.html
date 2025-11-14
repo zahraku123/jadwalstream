@@ -129,7 +129,7 @@
                 <!-- Video Preview -->
                 <div class="relative">
                     <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
-                        <source src="/looped-videos/{{ video.output_filename }}#t=0.5">
+                        <source src="{{ url_for('serve_looped_video', filename=video.output_filename) }}#t=0.5">
                         Your browser does not support the video tag.
                     </video>
                     <div class="absolute top-2 left-2">
