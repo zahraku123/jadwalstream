@@ -39,6 +39,12 @@ def init_database():
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'demo',
+                status TEXT NOT NULL DEFAULT 'approved',
+                expiry_days INTEGER,
+                expiry_date TIMESTAMP,
+                account_status TEXT DEFAULT 'active',
+                whatsapp TEXT,
+                profile_picture TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -217,13 +223,20 @@ def get_user_by_id(user_id: int) -> Optional[Dict]:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def create_user(username: str, password_hash: str, role: str = 'demo') -> int:
+def create_user(username: str, password_hash: str, role: str = 'demo', status: str = 'approved', expiry_days: int = None, whatsapp: str = None) -> int:
     """Create new user and return user ID"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
+
+        # Calculate expiry_date if expiry_days is provided
+        expiry_date = None
+        if expiry_days is not None and expiry_days > 0:
+            from datetime import datetime, timedelta
+            expiry_date = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d %H:%M:%S')
+
         cursor.execute(
-            'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-            (username, password_hash, role)
+            'INSERT INTO users (username, password_hash, role, status, expiry_days, expiry_date, account_status, whatsapp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (username, password_hash, role, status, expiry_days, expiry_date, 'active', whatsapp)
         )
         return cursor.lastrowid
 
@@ -241,6 +254,66 @@ def update_user_password(username: str, password_hash: str) -> bool:
         cursor.execute('UPDATE users SET password_hash = ? WHERE username = ?', (password_hash, username))
         return cursor.rowcount > 0
 
+def update_user_status(username: str, status: str) -> bool:
+    """Update user status (pending/approved/rejected)"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET status = ? WHERE username = ?', (status, username))
+        return cursor.rowcount > 0
+
+def update_user_expiry(user_id: int, expiry_days: int) -> bool:
+    """Update user expiry days and calculate new expiry date"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        if expiry_days is None or expiry_days == 0:
+            # Unlimited - set to NULL
+            cursor.execute(
+                'UPDATE users SET expiry_days = NULL, expiry_date = NULL, account_status = ? WHERE id = ?',
+                ('active', user_id)
+            )
+        else:
+            from datetime import datetime, timedelta
+            expiry_date = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d %H:%M:%S')
+            cursor.execute(
+                'UPDATE users SET expiry_days = ?, expiry_date = ?, account_status = ? WHERE id = ?',
+                (expiry_days, expiry_date, 'active', user_id)
+            )
+        return cursor.rowcount > 0
+
+def check_user_expiry(user_id: int) -> dict:
+    """Check if user account is expired and update status"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT expiry_date, account_status FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            return {'expired': True, 'status': 'not_found'}
+
+        expiry_date = row['expiry_date']
+        current_status = row['account_status']
+
+        # If no expiry date, account is active (unlimited)
+        if not expiry_date:
+            return {'expired': False, 'status': 'active', 'days_remaining': None}
+
+        from datetime import datetime
+        expiry_datetime = datetime.strptime(expiry_date, '%Y-%m-%d %H:%M:%S')
+        now = datetime.now()
+
+        if now > expiry_datetime:
+            # Account expired
+            if current_status != 'expired':
+                cursor.execute('UPDATE users SET account_status = ? WHERE id = ?', ('expired', user_id))
+            return {'expired': True, 'status': 'expired', 'days_remaining': 0}
+        else:
+            # Account still active
+            days_remaining = (expiry_datetime - now).days
+            if current_status != 'active':
+                cursor.execute('UPDATE users SET account_status = ? WHERE id = ?', ('active', user_id))
+            return {'expired': False, 'status': 'active', 'days_remaining': days_remaining}
+
 def delete_user(username: str) -> bool:
     """Delete user and all associated data (CASCADE)"""
     with get_db_connection() as conn:
@@ -252,7 +325,7 @@ def list_all_users() -> List[Dict]:
     """List all users"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT id, username, role, created_at FROM users ORDER BY created_at DESC')
+        cursor.execute('SELECT id, username, role, status, created_at FROM users ORDER BY created_at DESC')
         return [dict(row) for row in cursor.fetchall()]
 
 # ============= VIDEO FUNCTIONS =============

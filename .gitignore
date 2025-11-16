@@ -56,7 +56,6 @@ jadwalstream.db.backup_*
 modules/database/jadwalstream.db
 auto_upload_config.json
 gemini_config.json
-license_config.json
 
 # User generated content
 videos/

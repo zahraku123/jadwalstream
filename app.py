@@ -25,6 +25,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from modules.auth import (
     User, get_user_by_id, authenticate_user, initialize_default_user, 
     create_user, list_users, change_role, delete_user, change_user_password,
+    approve_user, reject_user,
     get_user_limits, can_user_add_stream, can_user_upload, 
     update_user_limits, get_all_users_with_limits, calculate_user_storage
 )
@@ -1222,7 +1223,15 @@ def login():
             next_page = request.args.get('next')
             return redirect(next_page if next_page else url_for('home'))
         else:
-            flash('Username atau password salah!', 'error')
+            # Check if user exists but not approved
+            from modules.database import get_user_by_username as db_get_user
+            user_data = db_get_user(username)
+            if user_data and user_data.get('status') == 'pending':
+                flash('Akun Anda masih menunggu persetujuan admin.', 'warning')
+            elif user_data and user_data.get('status') == 'rejected':
+                flash('Akun Anda ditolak oleh admin. Hubungi administrator.', 'error')
+            else:
+                flash('Username atau password salah!', 'error')
     
     return render_template('login.html')
 
@@ -1244,9 +1253,9 @@ def register():
             flash('Konfirmasi password tidak cocok', 'error')
             return redirect(url_for('register'))
         
-        ok, msg = create_user(username, password, role='user')
+        ok, msg = create_user(username, password, role='user', status='pending')
         if ok:
-            flash('Registrasi berhasil, silakan login', 'success')
+            flash('Registrasi berhasil! Akun Anda menunggu persetujuan admin.', 'success')
             return redirect(url_for('login'))
         else:
             flash(msg, 'error')
@@ -1558,25 +1567,34 @@ def video_gallery():
 @login_required
 @demo_readonly
 def upload_video():
-    # Check storage limit before upload
-    from modules.auth import can_user_upload
+    # Get user info for storage limit check
+    from modules.auth import can_user_upload, get_user_limits
     
     user_id = int(current_user.id)
-    files = request.files.getlist('video_files')
     
-    # Calculate total size
-    total_size = 0
-    for file in files:
-        if file and hasattr(file, 'content_length') and file.content_length:
-            total_size += file.content_length
-    
-    total_size_mb = total_size / (1024 * 1024) if total_size > 0 else 0
-    
-    # Check if user can upload this size
-    can_upload, message = can_user_upload(user_id, total_size_mb)
-    if not can_upload:
-        flash(f'Upload failed: {message}', 'error')
-        return redirect(url_for('video_gallery'))
+    # Get user limits first
+    limits = get_user_limits(user_id)
+    if limits and not limits['is_admin']:
+        # Pre-check: Get approximate file sizes from request
+        # Note: content_length may not be reliable, we'll do final check after save
+        files = request.files.getlist('video_files')
+        
+        # Calculate approximate total size from Content-Length header
+        total_size = 0
+        for file in files:
+            if file and file.filename:
+                # Try to get file size by seeking to end
+                file.seek(0, 2)  # Seek to end
+                file_size = file.tell()
+                file.seek(0)  # Reset to beginning
+                total_size += file_size
+        
+        if total_size > 0:
+            total_size_mb = total_size / (1024 * 1024)
+            can_upload, message = can_user_upload(user_id, total_size_mb)
+            if not can_upload:
+                flash(f'Upload failed: {message}', 'error')
+                return redirect(url_for('video_gallery'))
     
     # Continue with original upload logic...
     # Check if multiple files or single file
@@ -1612,6 +1630,17 @@ def upload_video():
                 # Save the file
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
                 file.save(file_path)
+                
+                # Check file size after save (for non-admin users)
+                if limits and not limits['is_admin']:
+                    file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                    can_upload, message = can_user_upload(user_id, file_size_mb)
+                    if not can_upload:
+                        # Delete the uploaded file
+                        os.remove(file_path)
+                        flash(f'Upload failed for {original_filename}: {message}', 'error')
+                        failed_count += 1
+                        continue
                 
                 # Use original filename as title (without extension)
                 video_title = original_filename.rsplit('.', 1)[0]
@@ -1811,6 +1840,10 @@ def thumbnail_gallery():
 @login_required
 @demo_readonly
 def upload_thumbnail():
+    # Check storage limit
+    from modules.auth import can_user_upload, get_user_limits
+    user_id = int(current_user.id)
+    
     if 'thumbnail_file' not in request.files:
         flash('No file part', 'danger')
         return redirect(url_for('thumbnail_gallery'))
@@ -1821,6 +1854,18 @@ def upload_thumbnail():
         return redirect(url_for('thumbnail_gallery'))
     
     if file and allowed_thumbnail_file(file.filename):
+        # Pre-check file size
+        limits = get_user_limits(user_id)
+        if limits and not limits['is_admin']:
+            file.seek(0, 2)
+            file_size_mb = file.tell() / (1024 * 1024)
+            file.seek(0)
+            
+            can_upload, message = can_user_upload(user_id, file_size_mb)
+            if not can_upload:
+                flash(f'Upload failed: {message}', 'error')
+                return redirect(url_for('thumbnail_gallery'))
+        
         # Generate unique filename
         original_filename = secure_filename(file.filename)
         file_extension = original_filename.rsplit('.', 1)[1].lower()
@@ -1829,6 +1874,15 @@ def upload_thumbnail():
         # Save the file
         file_path = os.path.join(THUMBNAIL_FOLDER, unique_filename)
         file.save(file_path)
+        
+        # Post-check actual file size
+        if limits and not limits['is_admin']:
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            can_upload, message = can_user_upload(user_id, file_size_mb)
+            if not can_upload:
+                os.remove(file_path)
+                flash(f'Upload failed: {message}', 'error')
+                return redirect(url_for('thumbnail_gallery'))
         
         # Add to database
         thumbnail_title = request.form.get('thumbnail_title', 'Untitled Thumbnail')
@@ -2142,7 +2196,23 @@ def admin_users():
             username = request.form.get('username', '').strip()
             password = request.form.get('password', '').strip()
             role_new = request.form.get('role', 'demo').strip().lower()
-            ok, msg = create_user(username, password, role=role_new)
+            max_streams = int(request.form.get('max_streams', 3))
+            max_storage_mb = int(request.form.get('max_storage_mb', 2000))
+            expiry_days = request.form.get('expiry_days', '').strip()
+            expiry_days = int(expiry_days) if expiry_days and expiry_days != '0' else None
+            whatsapp = request.form.get('whatsapp', '').strip() or None
+
+            # Admin creates user with approved status
+            ok, msg = create_user(username, password, role=role_new, status='approved',
+                                expiry_days=expiry_days, whatsapp=whatsapp)
+
+            if ok:
+                # Set user limits after creation
+                from modules.database import get_user_by_username as db_get_user
+                user_data = db_get_user(username)
+                if user_data:
+                    update_user_limits(user_data['id'], max_streams, max_storage_mb)
+
             flash(msg, 'success' if ok else 'error')
         elif action == 'update_role':
             username = request.form.get('username')
@@ -2166,6 +2236,14 @@ def admin_users():
             else:
                 ok, msg = change_user_password(username, new_password)
                 flash(msg, 'success' if ok else 'error')
+        elif action == 'approve':
+            username = request.form.get('username', '').strip()
+            ok, msg = approve_user(username)
+            flash(msg, 'success' if ok else 'error')
+        elif action == 'reject':
+            username = request.form.get('username', '').strip()
+            ok, msg = reject_user(username)
+            flash(msg, 'success' if ok else 'error')
         return redirect(url_for('admin_users'))
     users = list_users()
     
@@ -2705,6 +2783,7 @@ def run_scheduler():
 
 @app.route('/license/activate', methods=['POST'])
 @login_required
+@require_admin
 def activate_license():
     """Activate license with key"""
     license_key = request.form.get('license_key', '').strip().upper()
@@ -2728,6 +2807,7 @@ def activate_license():
 
 @app.route('/license/verify', methods=['POST'])
 @login_required
+@require_admin
 def verify_license_online():
     """Force online verification"""
     try:
@@ -2745,6 +2825,7 @@ def verify_license_online():
 
 @app.route('/license/info')
 @login_required
+@require_admin
 def get_license_info():
     """Get license info as JSON (for API/AJAX)"""
     try:
@@ -2977,6 +3058,8 @@ def video_looping():
 @demo_readonly
 def start_video_looping():
     """Start looping selected videos"""
+    from modules.auth import can_user_upload, get_user_limits
+    
     user_id = int(current_user.id)
     video_ids = request.form.getlist('video_ids[]')
     loop_duration = request.form.get('loop_duration', '60')  # Default 60 minutes
@@ -2996,6 +3079,35 @@ def start_video_looping():
     
     videos = get_video_database()
     looped_videos = get_looped_videos()
+    
+    # Check storage limit before processing (for non-admin users)
+    limits = get_user_limits(user_id)
+    if limits and not limits['is_admin']:
+        # Estimate total output size
+        # Looped videos will be approximately same bitrate as original
+        # Estimate: (original_size / original_duration) * loop_duration
+        total_estimated_size_mb = 0
+        
+        for video_id in video_ids:
+            video = next((v for v in videos if v['id'] == video_id), None)
+            if video:
+                # Get original video file size and duration
+                original_path = os.path.join(VIDEO_FOLDER, video['filename'])
+                if os.path.exists(original_path):
+                    original_size_mb = os.path.getsize(original_path) / (1024 * 1024)
+                    
+                    # Estimate output size based on loop duration
+                    # If we can't get duration, assume worst case (loop duration = original duration)
+                    # For safety, use original size as minimum estimate
+                    estimated_size = original_size_mb * (loop_duration_minutes / 5)  # Rough estimate
+                    total_estimated_size_mb += max(original_size_mb, estimated_size)
+        
+        # Check if user has enough storage for estimated output
+        if total_estimated_size_mb > 0:
+            can_upload, message = can_user_upload(user_id, total_estimated_size_mb)
+            if not can_upload:
+                flash(f'Tidak dapat memproses loop: {message}. Estimasi ukuran output: {total_estimated_size_mb:.2f} MB', 'error')
+                return redirect(url_for('video_looping'))
     
     for video_id in video_ids:
         video = next((v for v in videos if v['id'] == video_id), None)
@@ -3055,6 +3167,24 @@ def start_video_looping():
                 stdout, stderr = process.communicate()
                 
                 if process.returncode == 0:
+                    # Check storage limit after file is created (for non-admin)
+                    output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+                    user_limits = get_user_limits(current_user_id)
+                    
+                    if user_limits and not user_limits['is_admin']:
+                        can_save, msg = can_user_upload(current_user_id, output_size_mb)
+                        if not can_save:
+                            # Delete the output file - exceeds storage limit
+                            os.remove(output_path)
+                            entry['status'] = 'failed'
+                            entry['error'] = f'Storage limit exceeded: {msg}'
+                            update_looped_video_in_db(entry['id'], {
+                                'status': 'failed',
+                                'progress': 0
+                            })
+                            logging.error(f"Looped video exceeds storage limit for user {current_user_id}: {output_size_mb:.2f} MB")
+                            return
+                    
                     # Success - generate thumbnail and update entry
                     thumbnail_generated = False
                     try:
@@ -4199,13 +4329,36 @@ def auto_upload_scheduler():
                             logging.info(f"[AUTO-UPLOAD][{username}] ✓ Successfully uploaded: {item['title']}")
                             logging.info(f"[AUTO-UPLOAD][{username}] YouTube Video ID: {video_id}")
                             uploads_processed += 1
-                            
+
+                            # Send Telegram notification (success)
+                            try:
+                                from modules.services import telegram_notifier
+                                telegram_notifier.notify_upload_success(
+                                    title=item['title'],
+                                    youtube_video_id=video_id,
+                                    scheduled_time=item['scheduled_publish_time'],
+                                    user_id=user_id
+                                )
+                            except Exception as notif_error:
+                                logging.error(f"[AUTO-UPLOAD][{username}] Failed to send Telegram notification: {notif_error}")
+
                     except Exception as e:
                         logging.error(f"[AUTO-UPLOAD][{username}] Error uploading {item.get('title', 'Unknown')}: {e}")
                         update_bulk_upload_item(item['id'], user_id, {
                             'status': 'failed',
                             'error_message': str(e)
                         })
+
+                        # Send Telegram notification (failed)
+                        try:
+                            from modules.services import telegram_notifier
+                            telegram_notifier.notify_upload_failed(
+                                title=item.get('title', 'Unknown'),
+                                error_message=str(e),
+                                user_id=user_id
+                            )
+                        except Exception as notif_error:
+                            logging.error(f"[AUTO-UPLOAD][{username}] Failed to send Telegram notification: {notif_error}")
             
             # Update status before sleep
             next_check_time = datetime.now(pytz.timezone(TIMEZONE)) + timedelta(minutes=min_check_interval)
@@ -4258,15 +4411,51 @@ def admin_update_limits():
     user_id = int(request.form.get('user_id'))
     max_streams = int(request.form.get('max_streams', 0))
     max_storage_mb = int(request.form.get('max_storage_mb', 0))
-    
+    expiry_days = request.form.get('expiry_days', '').strip()
+    expiry_days_int = int(expiry_days) if expiry_days and expiry_days != '0' else None
+
     success = update_user_limits(user_id, max_streams, max_storage_mb)
-    
-    if success:
-        flash(f'User limits updated successfully!', 'success')
+
+    # Update expiry days
+    from modules.database import update_user_expiry
+    expiry_updated = update_user_expiry(user_id, expiry_days_int)
+
+    if success and expiry_updated:
+        flash(f'User limits and expiry updated successfully!', 'success')
+    elif success:
+        flash(f'User limits updated, but expiry update failed', 'warning')
     else:
         flash('Failed to update limits (cannot modify admin users)', 'error')
     
     return redirect(url_for('admin_users'))
+
+@app.route('/profile')
+@login_required
+def profile():
+    """User profile page"""
+    user_id = int(current_user.id)
+
+    # Get user limits and info
+    user_info = get_user_limits(user_id)
+
+    if not user_info:
+        flash('User not found', 'error')
+        return redirect(url_for('index'))
+
+    # Get admin WhatsApp for contact (if configured)
+    admin_whatsapp = None
+    try:
+        from modules.database import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT whatsapp FROM users WHERE is_admin = 1 LIMIT 1')
+            row = cursor.fetchone()
+            if row and row['whatsapp']:
+                admin_whatsapp = row['whatsapp']
+    except:
+        pass
+
+    return render_template('profile.html', user_info=user_info, admin_whatsapp=admin_whatsapp)
 
 @app.route('/admin/users/reset_usage', methods=['POST'])
 @login_required

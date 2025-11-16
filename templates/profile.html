@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}User Profile{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Cyber Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-white font-mono flex items-center">
+            <i class="fas fa-user-circle text-cyan-400 mr-3"></i>
+            <span class="text-cyan-400">USER</span> PROFILE
+        </h1>
+        <p class="text-slate-400 text-sm mt-1 font-mono">Your account information and status</p>
+    </div>
+
+    {% if user_info.account_status == 'expired' %}
+    <!-- Expired Alert -->
+    <div class="mb-6 bg-gradient-to-r from-red-900/30 to-red-800/30 border-l-4 border-red-500 p-4 rounded">
+        <div class="flex items-center">
+            <i class="fas fa-exclamation-triangle text-red-400 text-2xl mr-3"></i>
+            <div>
+                <h3 class="text-lg font-bold text-red-400 mb-1">Account Expired</h3>
+                <p class="text-gray-300 text-sm">Your account has expired. Please contact admin to renew your subscription.</p>
+                {% if admin_whatsapp %}
+                <a href="https://wa.me/{{ admin_whatsapp }}?text=Hi,%20my%20account%20{{ user_info.username }}%20has%20expired.%20Please%20help%20me%20renew%20it."
+                   target="_blank"
+                   class="inline-block mt-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors">
+                    <i class="fab fa-whatsapp mr-2"></i>Contact Admin via WhatsApp
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% elif user_info.days_remaining is not none and user_info.days_remaining <= 7 %}
+    <!-- Warning Alert -->
+    <div class="mb-6 bg-gradient-to-r from-yellow-900/30 to-yellow-800/30 border-l-4 border-yellow-500 p-4 rounded">
+        <div class="flex items-center">
+            <i class="fas fa-clock text-yellow-400 text-2xl mr-3"></i>
+            <div>
+                <h3 class="text-lg font-bold text-yellow-400 mb-1">Account Expiring Soon</h3>
+                <p class="text-gray-300 text-sm">Your account will expire in {{ user_info.days_remaining }} days. Please contact admin to renew.</p>
+                {% if admin_whatsapp %}
+                <a href="https://wa.me/{{ admin_whatsapp }}?text=Hi,%20I%20would%20like%20to%20renew%20my%20account%20{{ user_info.username }}%20before%20it%20expires."
+                   target="_blank"
+                   class="inline-block mt-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors">
+                    <i class="fab fa-whatsapp mr-2"></i>Contact Admin via WhatsApp
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Profile Card -->
+        <div class="lg:col-span-1">
+            <div class="cyber-card">
+                <div class="cyber-card-header bg-gradient-to-r from-cyan-600 to-cyan-800">
+                    <h3 class="text-lg font-semibold font-mono">
+                        <i class="fas fa-id-card mr-2"></i>PROFILE
+                    </h3>
+                </div>
+                <div class="cyber-card-body text-center">
+                    <!-- Profile Picture -->
+                    <div class="mb-4">
+                        {% if user_info.profile_picture %}
+                            <img src="{{ url_for('static', filename='uploads/profiles/' + user_info.profile_picture) }}"
+                                 alt="Profile Picture"
+                                 class="w-32 h-32 rounded-full mx-auto border-4 border-cyan-500">
+                        {% else %}
+                            <div class="w-32 h-32 rounded-full mx-auto border-4 border-cyan-500 bg-gradient-to-br from-cyan-600 to-purple-600 flex items-center justify-center">
+                                <i class="fas fa-user text-white text-5xl"></i>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Username -->
+                    <h2 class="text-2xl font-bold text-white mb-2">{{ user_info.username }}</h2>
+
+                    <!-- Role Badge -->
+                    {% if user_info.is_admin %}
+                        <span class="cyber-badge warning inline-block mb-4">
+                            <i class="fas fa-crown mr-1"></i>ADMIN
+                        </span>
+                    {% else %}
+                        <span class="cyber-badge primary inline-block mb-4">
+                            <i class="fas fa-user mr-1"></i>USER
+                        </span>
+                    {% endif %}
+
+                    <!-- WhatsApp -->
+                    {% if user_info.whatsapp %}
+                    <div class="mt-4 p-3 bg-gray-800 rounded-lg">
+                        <p class="text-xs text-gray-400 mb-1">WhatsApp Number</p>
+                        <a href="https://wa.me/{{ user_info.whatsapp }}" target="_blank" class="text-green-400 hover:text-green-300 flex items-center justify-center">
+                            <i class="fab fa-whatsapp mr-2"></i>
+                            +{{ user_info.whatsapp }}
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Account Status & Limits -->
+        <div class="lg:col-span-2">
+            <!-- Account Status -->
+            <div class="cyber-card mb-6">
+                <div class="cyber-card-header bg-gradient-to-r from-purple-600 to-purple-800">
+                    <h3 class="text-lg font-semibold font-mono">
+                        <i class="fas fa-info-circle mr-2"></i>ACCOUNT STATUS
+                    </h3>
+                </div>
+                <div class="cyber-card-body">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Status -->
+                        <div class="p-4 bg-gray-800 rounded-lg">
+                            <p class="text-xs text-gray-400 mb-2">Status</p>
+                            {% if user_info.account_status == 'expired' %}
+                                <span class="cyber-badge danger text-lg">
+                                    <i class="fas fa-times-circle mr-1"></i>EXPIRED
+                                </span>
+                            {% elif user_info.account_status == 'active' %}
+                                <span class="cyber-badge success text-lg">
+                                    <i class="fas fa-check-circle mr-1"></i>ACTIVE
+                                </span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Days Remaining -->
+                        <div class="p-4 bg-gray-800 rounded-lg">
+                            <p class="text-xs text-gray-400 mb-2">Time Remaining</p>
+                            {% if user_info.is_admin or user_info.days_remaining is none %}
+                                <p class="text-xl font-bold text-green-400">
+                                    <i class="fas fa-infinity mr-2"></i>Unlimited
+                                </p>
+                            {% elif user_info.account_status == 'expired' %}
+                                <p class="text-xl font-bold text-red-400">
+                                    <i class="fas fa-ban mr-2"></i>0 Days
+                                </p>
+                            {% else %}
+                                <p class="text-xl font-bold {% if user_info.days_remaining <= 7 %}text-yellow-400{% else %}text-cyan-400{% endif %}">
+                                    <i class="fas fa-calendar-alt mr-2"></i>{{ user_info.days_remaining }} Days
+                                </p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Expiry Date -->
+                        {% if user_info.expiry_date and not user_info.is_admin %}
+                        <div class="p-4 bg-gray-800 rounded-lg md:col-span-2">
+                            <p class="text-xs text-gray-400 mb-2">Expires On</p>
+                            <p class="text-lg font-mono text-white">
+                                <i class="fas fa-calendar-times mr-2 text-red-400"></i>
+                                {{ user_info.expiry_date }}
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Usage Limits -->
+            <div class="cyber-card">
+                <div class="cyber-card-header bg-gradient-to-r from-cyan-600 to-cyan-800">
+                    <h3 class="text-lg font-semibold font-mono">
+                        <i class="fas fa-chart-bar mr-2"></i>USAGE & LIMITS
+                    </h3>
+                </div>
+                <div class="cyber-card-body">
+                    <!-- Streams -->
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm text-gray-400">
+                                <i class="fas fa-stream mr-2 text-cyan-400"></i>Streams/Schedules
+                            </span>
+                            {% if user_info.is_admin %}
+                                <span class="text-sm text-green-400">Unlimited</span>
+                            {% else %}
+                                <span class="text-sm text-white">{{ user_info.current_streams }}/{{ user_info.max_streams }}</span>
+                            {% endif %}
+                        </div>
+                        {% if not user_info.is_admin %}
+                        <div class="w-full bg-gray-700 rounded-full h-3">
+                            {% set stream_pct = (user_info.current_streams / user_info.max_streams * 100)|round if user_info.max_streams > 0 else 0 %}
+                            <div class="h-3 rounded-full {% if stream_pct < 70 %}bg-green-500{% elif stream_pct < 90 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                                 style="width: {{ stream_pct }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">{{ user_info.streams_remaining }} streams remaining</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Storage -->
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm text-gray-400">
+                                <i class="fas fa-hdd mr-2 text-purple-400"></i>Storage
+                            </span>
+                            {% if user_info.is_admin %}
+                                <span class="text-sm text-green-400">Unlimited</span>
+                            {% else %}
+                                <span class="text-sm text-white">{{ "%.1f"|format(user_info.current_storage_mb) }}MB / {{ user_info.max_storage_mb }}MB</span>
+                            {% endif %}
+                        </div>
+                        {% if not user_info.is_admin %}
+                        <div class="w-full bg-gray-700 rounded-full h-3">
+                            {% set storage_pct = (user_info.current_storage_mb / user_info.max_storage_mb * 100)|round if user_info.max_storage_mb > 0 else 0 %}
+                            <div class="h-3 rounded-full {% if storage_pct < 70 %}bg-green-500{% elif storage_pct < 90 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                                 style="width: {{ storage_pct }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">{{ "%.1f"|format(user_info.storage_remaining_mb) }}MB remaining</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact Admin Section -->
+    {% if not user_info.is_admin and admin_whatsapp %}
+    <div class="mt-6 cyber-card">
+        <div class="cyber-card-header bg-gradient-to-r from-green-600 to-green-800">
+            <h3 class="text-lg font-semibold font-mono">
+                <i class="fas fa-headset mr-2"></i>NEED HELP?
+            </h3>
+        </div>
+        <div class="cyber-card-body text-center">
+            <p class="text-gray-300 mb-4">Contact admin for account renewal, upgrade, or support</p>
+            <a href="https://wa.me/{{ admin_whatsapp }}?text=Hi,%20I%20need%20help%20with%20my%20account%20{{ user_info.username }}"
+               target="_blank"
+               class="cyber-btn success inline-flex items-center">
+                <i class="fab fa-whatsapp mr-2"></i>Contact Admin via WhatsApp
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

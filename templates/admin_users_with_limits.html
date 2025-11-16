@@ -3,14 +3,15 @@
 {% block title %}User Management{% endblock %}
 
 {% block content %}
-<div x-data="{ 
+<div x-data="{
     activeTab: 'users',
-    deleteUser: null, 
-    changePasswordUser: null, 
+    deleteUser: null,
+    changePasswordUser: null,
     newPassword: '',
     editLimitsUser: null,
     editMaxStreams: 0,
-    editMaxStorage: 0
+    editMaxStorage: 0,
+    editExpiryDays: 0
 }">
     <!-- Cyber Header -->
     <div class="mb-8">
@@ -76,17 +77,35 @@
                             <input type="number" name="max_streams" value="3" min="0" class="cyber-input">
                             <p class="text-xs text-gray-500 mt-1">Total live streams + schedules allowed</p>
                         </div>
-                        
+
                         <div class="cyber-input-group">
                             <label class="cyber-label">
                                 <i class="fas fa-hdd mr-2"></i>Max Storage (MB)
                             </label>
                             <input type="number" name="max_storage_mb" value="2000" min="0" class="cyber-input">
                             <p class="text-xs text-gray-500 mt-1">
-                                Quick: <span class="text-cyan-400">1000</span>=1GB | 
-                                <span class="text-cyan-400">5000</span>=5GB | 
+                                Quick: <span class="text-cyan-400">1000</span>=1GB |
+                                <span class="text-cyan-400">5000</span>=5GB |
                                 <span class="text-cyan-400">10000</span>=10GB
                             </p>
+                        </div>
+
+                        <div class="cyber-input-group">
+                            <label class="cyber-label">
+                                <i class="fas fa-calendar-alt mr-2"></i>Active Days Limit
+                            </label>
+                            <input type="number" name="expiry_days" value="30" min="0" class="cyber-input">
+                            <p class="text-xs text-gray-500 mt-1">
+                                Days until account expires (0 = unlimited)
+                            </p>
+                        </div>
+
+                        <div class="cyber-input-group">
+                            <label class="cyber-label">
+                                <i class="fas fa-phone mr-2"></i>WhatsApp Number (Optional)
+                            </label>
+                            <input type="text" name="whatsapp" class="cyber-input" placeholder="e.g., 628123456789">
+                            <p class="text-xs text-gray-500 mt-1">Format: country code + number (without +)</p>
                         </div>
                         
                         <button type="submit" class="cyber-btn success w-full">
@@ -109,13 +128,14 @@
                             <thead>
                                 <tr>
                                     <th><i class="fas fa-user mr-2"></i>USER</th>
+                                    <th><i class="fas fa-circle mr-2"></i>STATUS</th>
                                     <th><i class="fas fa-chart-bar mr-2"></i>USAGE</th>
                                     <th><i class="fas fa-tools mr-2"></i>ACTIONS</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for username, data in users.items() %}
-                                <tr>
+                                <tr class="{% if data.get('status') == 'pending' %}bg-yellow-900/20{% elif data.get('status') == 'rejected' %}bg-red-900/20{% endif %}">
                                     <td>
                                         <div class="flex items-center">
                                             {% if data.role == 'admin' %}
@@ -125,6 +145,22 @@
                                             {% endif %}
                                             <span class="font-mono">{{ username }}</span>
                                         </div>
+                                    </td>
+                                    <td>
+                                        {% set status = data.get('status', 'approved') %}
+                                        {% if status == 'pending' %}
+                                            <span class="cyber-badge warning">
+                                                <i class="fas fa-clock mr-1"></i>PENDING
+                                            </span>
+                                        {% elif status == 'rejected' %}
+                                            <span class="cyber-badge danger">
+                                                <i class="fas fa-times-circle mr-1"></i>REJECTED
+                                            </span>
+                                        {% else %}
+                                            <span class="cyber-badge success">
+                                                <i class="fas fa-check-circle mr-1"></i>APPROVED
+                                            </span>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         {% if data.role != 'admin' %}
@@ -139,19 +175,38 @@
                                     </td>
                                     <td>
                                         <div class="flex space-x-2">
-                                            {% if username != 'admin' %}
+                                            {% if status == 'pending' %}
+                                                <form action="{{ url_for('admin_users') }}" method="POST" style="display: inline;">
+                                                    <input type="hidden" name="action" value="approve">
+                                                    <input type="hidden" name="username" value="{{ username }}">
+                                                    <button type="submit" class="cyber-btn-sm success" title="Approve User">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                </form>
+                                                <form action="{{ url_for('admin_users') }}" method="POST" style="display: inline;">
+                                                    <input type="hidden" name="action" value="reject">
+                                                    <input type="hidden" name="username" value="{{ username }}">
+                                                    <button type="submit" class="cyber-btn-sm danger" title="Reject User">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </form>
+                                            {% else %}
                                                 <button 
                                                     @click="changePasswordUser = '{{ username }}'; newPassword = ''"
-                                                    class="cyber-btn small warning">
+                                                    class="cyber-btn-sm warning">
                                                     <i class="fas fa-key"></i>
                                                 </button>
-                                                <button 
-                                                    @click="deleteUser = '{{ username }}'"
-                                                    class="cyber-btn small danger">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            {% else %}
-                                                <span class="text-xs text-gray-500">Protected</span>
+                                                {% if username != 'admin' %}
+                                                    <button 
+                                                        @click="deleteUser = '{{ username }}'"
+                                                        class="cyber-btn-sm danger">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                {% else %}
+                                                    <span class="text-xs text-gray-500" title="Admin user cannot be deleted">
+                                                        <i class="fas fa-shield-alt"></i>
+                                                    </span>
+                                                {% endif %}
                                             {% endif %}
                                         </div>
                                     </td>
@@ -181,6 +236,7 @@
                                 <th class="px-4 py-3 text-left">User</th>
                                 <th class="px-4 py-3 text-left">Streams</th>
                                 <th class="px-4 py-3 text-left">Storage</th>
+                                <th class="px-4 py-3 text-left">Account Status</th>
                                 <th class="px-4 py-3 text-center">Actions</th>
                             </tr>
                         </thead>
@@ -239,11 +295,36 @@
                                         </div>
                                     {% endif %}
                                 </td>
+                                <td class="px-4 py-3">
+                                    {% if user.is_admin %}
+                                        <span class="text-yellow-400 text-xs">Admin</span>
+                                    {% elif user.account_status == 'expired' %}
+                                        <div class="space-y-1">
+                                            <span class="cyber-badge danger text-xs">
+                                                <i class="fas fa-times-circle mr-1"></i>EXPIRED
+                                            </span>
+                                        </div>
+                                    {% elif user.days_remaining is not none %}
+                                        <div class="space-y-1">
+                                            {% if user.days_remaining <= 7 %}
+                                                <span class="cyber-badge warning text-xs">
+                                                    <i class="fas fa-exclamation-triangle mr-1"></i>{{ user.days_remaining }} days left
+                                                </span>
+                                            {% else %}
+                                                <span class="cyber-badge success text-xs">
+                                                    <i class="fas fa-check-circle mr-1"></i>{{ user.days_remaining }} days left
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-green-400 text-xs">Unlimited</span>
+                                    {% endif %}
+                                </td>
                                 <td class="px-4 py-3 text-center">
                                     {% if not user.is_admin %}
-                                        <button 
-                                            @click="editLimitsUser = {{ user.user_id }}; editMaxStreams = {{ user.max_streams }}; editMaxStorage = {{ user.max_storage_mb }}"
-                                            class="cyber-btn small primary">
+                                        <button
+                                            @click="editLimitsUser = {{ user.user_id }}; editMaxStreams = {{ user.max_streams }}; editMaxStorage = {{ user.max_storage_mb }}; editExpiryDays = {{ user.expiry_days if user.expiry_days else 0 }}"
+                                            class="cyber-btn-sm primary">
                                             <i class="fas fa-edit mr-1"></i>Edit
                                         </button>
                                     {% else %}
@@ -353,14 +434,29 @@
                         </label>
                         <input type="number" name="max_storage_mb" x-model="editMaxStorage" min="0" required class="cyber-input">
                         <p class="text-xs text-gray-500 mt-1">
-                            Quick: 
-                            <button type="button" @click="editMaxStorage = 1000" class="text-cyan-400 hover:underline">1GB</button> | 
-                            <button type="button" @click="editMaxStorage = 5000" class="text-cyan-400 hover:underline">5GB</button> | 
-                            <button type="button" @click="editMaxStorage = 10000" class="text-cyan-400 hover:underline">10GB</button> | 
+                            Quick:
+                            <button type="button" @click="editMaxStorage = 1000" class="text-cyan-400 hover:underline">1GB</button> |
+                            <button type="button" @click="editMaxStorage = 5000" class="text-cyan-400 hover:underline">5GB</button> |
+                            <button type="button" @click="editMaxStorage = 10000" class="text-cyan-400 hover:underline">10GB</button> |
                             <button type="button" @click="editMaxStorage = 50000" class="text-cyan-400 hover:underline">50GB</button>
                         </p>
                     </div>
-                    
+
+                    <div class="cyber-input-group">
+                        <label class="cyber-label">
+                            <i class="fas fa-calendar-alt mr-2"></i>Active Days Limit
+                        </label>
+                        <input type="number" name="expiry_days" x-model="editExpiryDays" min="0" required class="cyber-input">
+                        <p class="text-xs text-gray-500 mt-1">
+                            Days until account expires (0 = unlimited). Quick:
+                            <button type="button" @click="editExpiryDays = 7" class="text-cyan-400 hover:underline">7 days</button> |
+                            <button type="button" @click="editExpiryDays = 30" class="text-cyan-400 hover:underline">30 days</button> |
+                            <button type="button" @click="editExpiryDays = 90" class="text-cyan-400 hover:underline">90 days</button> |
+                            <button type="button" @click="editExpiryDays = 365" class="text-cyan-400 hover:underline">1 year</button> |
+                            <button type="button" @click="editExpiryDays = 0" class="text-cyan-400 hover:underline">Unlimited</button>
+                        </p>
+                    </div>
+
                     <div class="flex space-x-3">
                         <button type="button" @click="editLimitsUser = null" class="cyber-btn secondary flex-1">Cancel</button>
                         <button type="submit" class="cyber-btn primary flex-1">

@@ -12,7 +12,9 @@ from .user_auth import (
     list_users,
     change_role,
     delete_user,
-    change_user_password
+    change_user_password,
+    approve_user,
+    reject_user
 )
 
 from .user_limits import (
@@ -35,6 +37,8 @@ __all__ = [
     'change_role',
     'delete_user',
     'change_user_password',
+    'approve_user',
+    'reject_user',
     'get_user_limits',
     'calculate_user_storage',
     'can_user_add_stream',

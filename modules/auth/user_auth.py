@@ -6,16 +6,18 @@ from modules.database.database import (
     create_user as db_create_user,
     update_user_role,
     update_user_password,
+    update_user_status,
     delete_user as db_delete_user,
     list_all_users
 )
 
 class User(UserMixin):
-    def __init__(self, id, username, password_hash, role='user'):
+    def __init__(self, id, username, password_hash, role='user', status='approved'):
         self.id = str(id)  # Flask-Login requires string ID
         self.username = username
         self.password_hash = password_hash
         self.role = role
+        self.status = status
 
 def get_user_by_username(username):
     """Get user by username"""
@@ -25,7 +27,8 @@ def get_user_by_username(username):
             user_data['id'],
             user_data['username'],
             user_data['password_hash'],
-            user_data.get('role', 'user')
+            user_data.get('role', 'user'),
+            user_data.get('status', 'approved')
         )
     return None
 
@@ -42,19 +45,20 @@ def get_user_by_id(user_id):
             user_data['id'],
             user_data['username'],
             user_data['password_hash'],
-            user_data.get('role', 'user')
+            user_data.get('role', 'user'),
+            user_data.get('status', 'approved')
         )
     return None
 
-def create_user(username, password, role='user'):
-    """Create a new user with role"""
+def create_user(username, password, role='user', status='approved', expiry_days=None, whatsapp=None):
+    """Create a new user with role and status"""
     # Check if user already exists
     if get_user_by_username(username):
         return False, "Username already exists"
-    
+
     try:
         password_hash = generate_password_hash(password)
-        user_id = db_create_user(username, password_hash, role)
+        user_id = db_create_user(username, password_hash, role, status, expiry_days, whatsapp)
         return True, "User created successfully"
     except Exception as e:
         return False, f"Error creating user: {str(e)}"
@@ -65,12 +69,17 @@ def authenticate_user(username, password):
     if not user_data:
         return None
     
+    # Check if user is approved
+    if user_data.get('status', 'approved') != 'approved':
+        return None  # User not approved yet
+    
     if check_password_hash(user_data['password_hash'], password):
         return User(
             user_data['id'],
             user_data['username'],
             user_data['password_hash'],
-            user_data.get('role', 'user')
+            user_data.get('role', 'user'),
+            user_data.get('status', 'approved')
         )
     return None
 
@@ -100,7 +109,7 @@ def change_role(username, new_role):
         return False, f"Error changing role: {str(e)}"
 
 def list_users():
-    """List all users as dict {username: {password_hash, role}}"""
+    """List all users as dict {username: {password_hash, role, status}}"""
     try:
         users_list = list_all_users()
         # Convert to old format for backward compatibility
@@ -109,6 +118,7 @@ def list_users():
             users_dict[user['username']] = {
                 'username': user['username'],
                 'role': user.get('role', 'demo'),
+                'status': user.get('status', 'approved'),
                 'password_hash': '[hidden]'  # Don't expose password hashes
             }
         return users_dict
@@ -163,3 +173,27 @@ def change_user_password(username, new_password):
         return False, "Failed to update password"
     except Exception as e:
         return False, f"Error changing password: {str(e)}"
+
+def approve_user(username):
+    """Approve a pending user"""
+    if not get_user_by_username(username):
+        return False, "User not found"
+    
+    try:
+        if update_user_status(username, 'approved'):
+            return True, f"User '{username}' approved successfully"
+        return False, "Failed to approve user"
+    except Exception as e:
+        return False, f"Error approving user: {str(e)}"
+
+def reject_user(username):
+    """Reject a pending user"""
+    if not get_user_by_username(username):
+        return False, "User not found"
+    
+    try:
+        if update_user_status(username, 'rejected'):
+            return True, f"User '{username}' rejected"
+        return False, "Failed to reject user"
+    except Exception as e:
+        return False, f"Error rejecting user: {str(e)}"

@@ -8,6 +8,8 @@ from .database import (
     get_user_by_username,
     get_user_by_id,
     create_user,
+    update_user_expiry,
+    check_user_expiry,
     get_schedules,
     get_all_schedules,
     get_schedules_by_user,

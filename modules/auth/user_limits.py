@@ -4,25 +4,29 @@ Functions to manage and check per-user limits (streams, storage)
 """
 
 import os
-from modules.database.database import get_db_connection
+from modules.database.database import get_db_connection, check_user_expiry
 
 def get_user_limits(user_id: int) -> dict:
     """Get user limits and current usage"""
+    # Check if user account is expired
+    expiry_info = check_user_expiry(user_id)
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Get user info
         cursor.execute('''
-            SELECT username, is_admin, max_streams, max_storage_mb 
+            SELECT username, is_admin, max_streams, max_storage_mb,
+                   expiry_date, expiry_days, account_status, whatsapp, profile_picture
             FROM users WHERE id = ?
         ''', (user_id,))
-        
+
         row = cursor.fetchone()
         if not row:
             return None
-        
+
         user_info = dict(row)
-        
+
         # If admin, return unlimited
         if user_info['is_admin']:
             return {
@@ -36,32 +40,42 @@ def get_user_limits(user_id: int) -> dict:
                 'streams_remaining': float('inf'),
                 'storage_remaining_mb': float('inf'),
                 'can_add_stream': True,
-                'can_upload': True
+                'can_upload': True,
+                'account_status': 'active',
+                'expiry_date': None,
+                'expiry_days': None,
+                'days_remaining': None,
+                'whatsapp': user_info.get('whatsapp'),
+                'profile_picture': user_info.get('profile_picture')
             }
-        
+
         # Count current streams (live_streams + schedules)
         cursor.execute('''
             SELECT COUNT(*) as count FROM live_streams WHERE user_id = ?
         ''', (user_id,))
         live_count = cursor.fetchone()['count']
-        
+
         cursor.execute('''
             SELECT COUNT(*) as count FROM schedules WHERE user_id = ?
         ''', (user_id,))
         schedule_count = cursor.fetchone()['count']
-        
+
         current_streams = live_count + schedule_count
-        
+
         # Calculate storage usage
         current_storage_mb = calculate_user_storage(user_id)
-        
+
         # Calculate remaining
         max_streams = user_info['max_streams'] or 0
         max_storage = user_info['max_storage_mb'] or 0
-        
+
         streams_remaining = max_streams - current_streams
         storage_remaining = max_storage - current_storage_mb
-        
+
+        # Check if account is expired
+        is_expired = expiry_info['expired']
+        can_use_features = not is_expired
+
         return {
             'user_id': user_id,
             'username': user_info['username'],
@@ -72,8 +86,15 @@ def get_user_limits(user_id: int) -> dict:
             'current_storage_mb': round(current_storage_mb, 2),
             'streams_remaining': streams_remaining,
             'storage_remaining_mb': round(storage_remaining, 2),
-            'can_add_stream': streams_remaining > 0,
-            'can_upload': storage_remaining > 0
+            'can_add_stream': streams_remaining > 0 and can_use_features,
+            'can_upload': storage_remaining > 0 and can_use_features,
+            'account_status': expiry_info['status'],
+            'is_expired': is_expired,
+            'expiry_date': user_info.get('expiry_date'),
+            'expiry_days': user_info.get('expiry_days'),
+            'days_remaining': expiry_info.get('days_remaining'),
+            'whatsapp': user_info.get('whatsapp'),
+            'profile_picture': user_info.get('profile_picture')
         }
 
 def calculate_user_storage(user_id: int) -> float:
@@ -105,8 +126,10 @@ def calculate_user_storage(user_id: int) -> float:
     
     # Calculate total size
     total_bytes = 0
-    video_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
-    thumbnail_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'thumbnails')
+    # Get project root directory (2 levels up from modules/auth/)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    video_folder = os.path.join(project_root, 'videos')
+    thumbnail_folder = os.path.join(project_root, 'thumbnails')
     looped_folder = os.path.join(video_folder, 'done')
     
     # Video files
@@ -134,13 +157,17 @@ def calculate_user_storage(user_id: int) -> float:
 def can_user_add_stream(user_id: int) -> tuple:
     """Check if user can add more streams. Returns (bool, message)"""
     limits = get_user_limits(user_id)
-    
+
     if limits is None:
         return False, "User not found"
-    
+
     if limits['is_admin']:
         return True, "Admin has unlimited streams"
-    
+
+    # Check if account is expired
+    if limits.get('is_expired', False):
+        return False, "Account expired. Please contact admin to renew."
+
     if limits['can_add_stream']:
         return True, f"Can add {limits['streams_remaining']} more streams"
     else:
@@ -149,13 +176,17 @@ def can_user_add_stream(user_id: int) -> tuple:
 def can_user_upload(user_id: int, file_size_mb: float = 0) -> tuple:
     """Check if user can upload file. Returns (bool, message)"""
     limits = get_user_limits(user_id)
-    
+
     if limits is None:
         return False, "User not found"
-    
+
     if limits['is_admin']:
         return True, "Admin has unlimited storage"
-    
+
+    # Check if account is expired
+    if limits.get('is_expired', False):
+        return False, "Account expired. Please contact admin to renew."
+
     if limits['storage_remaining_mb'] >= file_size_mb:
         remaining = limits['storage_remaining_mb'] - file_size_mb
         return True, f"{remaining:.2f}MB will remain after upload"
