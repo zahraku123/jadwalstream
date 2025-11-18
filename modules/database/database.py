@@ -268,6 +268,11 @@ def migrate_database():
                 except Exception as e:
                     print(f"⚠️  Could not add column '{column_name}': {e}")
         
+        # Fix existing admin users: set is_admin=1 for users with role='admin'
+        cursor.execute("UPDATE users SET is_admin = 1 WHERE role = 'admin' AND (is_admin IS NULL OR is_admin = 0)")
+        if cursor.rowcount > 0:
+            print(f"✅ Updated {cursor.rowcount} admin user(s) with is_admin flag")
+        
         conn.commit()
 
 # ============= USER FUNCTIONS =============
@@ -299,17 +304,22 @@ def create_user(username: str, password_hash: str, role: str = 'demo', status: s
             from datetime import datetime, timedelta
             expiry_date = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d %H:%M:%S')
 
+        # Set is_admin flag based on role
+        is_admin = 1 if role == 'admin' else 0
+
         cursor.execute(
-            'INSERT INTO users (username, password_hash, role, status, expiry_days, expiry_date, account_status, whatsapp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            (username, password_hash, role, status, expiry_days, expiry_date, 'active', whatsapp)
+            'INSERT INTO users (username, password_hash, role, status, expiry_days, expiry_date, account_status, whatsapp, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            (username, password_hash, role, status, expiry_days, expiry_date, 'active', whatsapp, is_admin)
         )
         return cursor.lastrowid
 
 def update_user_role(username: str, role: str) -> bool:
-    """Update user role"""
+    """Update user role and is_admin flag"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('UPDATE users SET role = ? WHERE username = ?', (role, username))
+        # Set is_admin flag based on role
+        is_admin = 1 if role == 'admin' else 0
+        cursor.execute('UPDATE users SET role = ?, is_admin = ? WHERE username = ?', (role, is_admin, username))
         return cursor.rowcount > 0
 
 def update_user_password(username: str, password_hash: str) -> bool:
