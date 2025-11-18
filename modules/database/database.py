@@ -45,6 +45,13 @@ def init_database():
                 account_status TEXT DEFAULT 'active',
                 whatsapp TEXT,
                 profile_picture TEXT,
+                is_admin INTEGER DEFAULT 0,
+                max_streams INTEGER,
+                max_storage_mb INTEGER,
+                scheduler_times TEXT,
+                auto_upload_enabled INTEGER DEFAULT 0,
+                auto_upload_offset_hours INTEGER DEFAULT 2,
+                auto_upload_check_interval INTEGER DEFAULT 30,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -121,6 +128,10 @@ def init_database():
                 repeat_daily INTEGER DEFAULT 0,
                 success INTEGER DEFAULT 0,
                 broadcast_link TEXT,
+                privacy_status TEXT DEFAULT 'unlisted',
+                auto_start INTEGER DEFAULT 0,
+                auto_stop INTEGER DEFAULT 0,
+                made_for_kids INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
@@ -202,6 +213,60 @@ def init_database():
             )
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_stream_timers_user_id ON stream_timers(user_id)')
+        
+        conn.commit()
+        
+        # Run migrations for existing databases
+        migrate_database()
+
+def migrate_database():
+    """Run database migrations to add missing columns to existing databases"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Migrate users table
+        cursor.execute('PRAGMA table_info(users)')
+        existing_columns = {row['name'] for row in cursor.fetchall()}
+        
+        # List of columns to add with their definitions
+        users_columns_to_add = {
+            'is_admin': 'INTEGER DEFAULT 0',
+            'max_streams': 'INTEGER',
+            'max_storage_mb': 'INTEGER',
+            'scheduler_times': 'TEXT',
+            'auto_upload_enabled': 'INTEGER DEFAULT 0',
+            'auto_upload_offset_hours': 'INTEGER DEFAULT 2',
+            'auto_upload_check_interval': 'INTEGER DEFAULT 30'
+        }
+        
+        # Add missing columns to users table
+        for column_name, column_def in users_columns_to_add.items():
+            if column_name not in existing_columns:
+                try:
+                    cursor.execute(f'ALTER TABLE users ADD COLUMN {column_name} {column_def}')
+                    print(f"✅ Added column '{column_name}' to users table")
+                except Exception as e:
+                    print(f"⚠️  Could not add column '{column_name}': {e}")
+        
+        # Migrate schedules table
+        cursor.execute('PRAGMA table_info(schedules)')
+        existing_schedules_columns = {row['name'] for row in cursor.fetchall()}
+        
+        schedules_columns_to_add = {
+            'privacy_status': "TEXT DEFAULT 'unlisted'",
+            'auto_start': 'INTEGER DEFAULT 0',
+            'auto_stop': 'INTEGER DEFAULT 0',
+            'made_for_kids': 'INTEGER DEFAULT 0'
+        }
+        
+        # Add missing columns to schedules table
+        for column_name, column_def in schedules_columns_to_add.items():
+            if column_name not in existing_schedules_columns:
+                try:
+                    cursor.execute(f'ALTER TABLE schedules ADD COLUMN {column_name} {column_def}')
+                    print(f"✅ Added column '{column_name}' to schedules table")
+                except Exception as e:
+                    print(f"⚠️  Could not add column '{column_name}': {e}")
         
         conn.commit()
 

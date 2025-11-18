@@ -77,7 +77,7 @@ def require_admin(f):
         user_data = get_user_by_id(int(current_user.id))
         if not user_data or not user_data.get('is_admin'):
             flash('Admin access required', 'error')
-            return redirect(url_for('index'))
+            return redirect(url_for('home'))
         
         return f(*args, **kwargs)
     return decorated_function
@@ -88,7 +88,7 @@ def demo_readonly(f):
     def decorated_function(*args, **kwargs):
         if current_user.role == 'demo':
             flash('Demo account has read-only access. Cannot perform this action.', 'warning')
-            return redirect(request.referrer or url_for('index'))
+            return redirect(request.referrer or url_for('home'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -4440,7 +4440,7 @@ def profile():
 
     if not user_info:
         flash('User not found', 'error')
-        return redirect(url_for('index'))
+        return redirect(url_for('home'))
 
     # Get admin WhatsApp for contact (if configured)
     admin_whatsapp = None
