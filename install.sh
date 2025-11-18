@@ -63,9 +63,11 @@ check_python() {
     fi
 }
 
-# Check and install FFmpeg
-check_ffmpeg() {
-    print_info "Checking FFmpeg..."
+# Check and install system dependencies
+check_system_deps() {
+    print_info "Checking system dependencies..."
+    
+    # Check FFmpeg
     if ! command -v ffmpeg &> /dev/null; then
         print_warning "FFmpeg is not installed."
         read -p "Do you want to install FFmpeg? (y/n): " -n 1 -r
@@ -86,8 +88,30 @@ check_ffmpeg() {
             print_warning "FFmpeg not installed. Streaming features will not work."
         fi
     else
-        FFMPEG_VERSION=$(ffmpeg -version | head -n 1)
-        print_info "FFmpeg detected: $FFMPEG_VERSION"
+        FFMPEG_VERSION=$(ffmpeg -version | head -n 1 | awk '{print $3}')
+        print_info "FFmpeg detected: version $FFMPEG_VERSION ✓"
+    fi
+    
+    # Check if running on Debian/Ubuntu for additional packages
+    if [[ "$OSTYPE" == "linux-gnu"* ]] && command -v apt &> /dev/null; then
+        print_info "Checking additional system packages..."
+        
+        # List of packages to check
+        packages_needed=()
+        
+        # Check for build essentials (might be needed for some Python packages)
+        if ! dpkg -s python3-dev &> /dev/null; then
+            packages_needed+=("python3-dev")
+        fi
+        
+        # Install missing packages if any
+        if [ ${#packages_needed[@]} -gt 0 ]; then
+            print_info "Installing additional packages: ${packages_needed[*]}"
+            sudo apt update
+            sudo apt install -y "${packages_needed[@]}"
+        else
+            print_info "All system dependencies satisfied ✓"
+        fi
     fi
 }
 
@@ -192,14 +216,17 @@ create_directories() {
     mkdir -p thumbnails
     mkdir -p tokens
     mkdir -p ffmpeg_logs
+    mkdir -p videos/done  # For looped videos
     print_info "Directories created"
     
-    # Create empty Excel file if not exists
-    if [ ! -f "live_stream_data.xlsx" ]; then
-        print_info "Creating empty schedule database..."
-        python3 create_empty_excel.py
+    # Initialize SQLite database
+    print_info "Initializing SQLite database..."
+    python3 -c "from modules.database import init_database; init_database(); print('Database initialized successfully')" 2>&1
+    if [ $? -eq 0 ]; then
+        print_info "Database initialized successfully"
     else
-        print_info "Schedule database already exists"
+        print_error "Failed to initialize database"
+        exit 1
     fi
 }
 
@@ -207,42 +234,58 @@ create_directories() {
 setup_environment() {
     print_info "Setting up environment..."
     
-    # Copy example files if not exist
-    print_info "Copying template files..."
-    for file in *.example; do
-        if [ -f "$file" ]; then
-            target="${file%.example}"
-            if [ ! -f "$target" ]; then
-                cp "$file" "$target"
-                print_info "Created $target from template"
-            else
-                print_info "Skipped $target (already exists)"
-            fi
-        fi
-    done
-    
     # Check for client_secret.json
     if [ ! -f "client_secret.json" ]; then
         print_warning "client_secret.json not found!"
-        echo "Please obtain OAuth credentials from Google Cloud Console:"
-        echo "1. Go to https://console.cloud.google.com"
-        echo "2. Create OAuth 2.0 credentials"
-        echo "3. Download and save as 'client_secret.json'"
         echo ""
-        echo "See SETUP.md for detailed instructions"
-        read -p "Press Enter when ready to continue..."
+        echo "⚠️  YouTube OAuth credentials required for full functionality"
+        echo ""
+        echo "To obtain credentials:"
+        echo "1. Go to https://console.cloud.google.com"
+        echo "2. Create a new project or select existing one"
+        echo "3. Enable YouTube Data API v3"
+        echo "4. Create OAuth 2.0 credentials (Desktop app)"
+        echo "5. Download and save as 'client_secret.json' in this directory"
+        echo ""
+        print_info "You can add this later - the app will still start"
+        read -p "Press Enter to continue..."
+    else
+        print_info "client_secret.json found ✓"
     fi
     
     # Check for license_config.json
     if [ ! -f "license_config.json" ]; then
         print_warning "license_config.json not found!"
-        echo "License system requires proper configuration."
-        echo "See LICENSE_APPSCRIPT_SETUP.md for detailed instructions"
-        read -p "Do you have license_config.json? (y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_info "You can set this up later. Template will be created."
-        fi
+        echo ""
+        echo "⚠️  License system configuration missing"
+        echo ""
+        echo "Creating default license_config.json..."
+        cat > license_config.json << 'EOF'
+{
+  "appScriptUrl": "YOUR_APPS_SCRIPT_URL_HERE",
+  "validatorKey": "YOUR_VALIDATOR_KEY_HERE"
+}
+EOF
+        print_info "Default license_config.json created"
+        print_info "Edit this file with your license server details"
+        print_info "See LICENSE_APPSCRIPT_SETUP.md for instructions"
+    else
+        print_info "license_config.json found ✓"
+    fi
+    
+    # Check for telegram config (optional)
+    if [ ! -f "modules/services/telegram_config.json" ]; then
+        print_info "Creating default telegram_config.json..."
+        mkdir -p modules/services
+        cat > modules/services/telegram_config.json << 'EOF'
+{
+  "enabled": false,
+  "bot_token": "YOUR_BOT_TOKEN_HERE",
+  "admin_chat_id": "YOUR_CHAT_ID_HERE"
+}
+EOF
+        print_info "Telegram notifications disabled by default"
+        print_info "Edit modules/services/telegram_config.json to enable"
     fi
 }
 
@@ -291,26 +334,31 @@ print_final_info() {
     echo "================================================"
     echo ""
     print_info "Application URL: http://localhost:5000"
-    print_info "Default login: admin / admin123"
+    print_info "Default credentials:"
+    echo "  • Admin: admin / admin123"
+    echo "  • Demo:  demo / demo123"
     echo ""
-    print_info "Useful commands:"
-    echo "  - pm2 list               : View all processes"
-    echo "  - pm2 logs jadwalstream  : View application logs"
-    echo "  - pm2 restart jadwalstream : Restart application"
-    echo "  - pm2 stop jadwalstream  : Stop application"
-    echo "  - pm2 monit              : Monitor resources"
+    if command -v pm2 &> /dev/null; then
+        print_info "PM2 Commands:"
+        echo "  • pm2 list                 - View all processes"
+        echo "  • pm2 logs jadwalstream    - View application logs"
+        echo "  • pm2 restart jadwalstream - Restart application"
+        echo "  • pm2 stop jadwalstream    - Stop application"
+        echo "  • pm2 monit                - Monitor resources"
+        echo ""
+    fi
+    print_warning "⚠️  Important Next Steps:"
+    echo "  1. ⚠️  CHANGE DEFAULT ADMIN PASSWORD IMMEDIATELY!"
+    echo "  2. Add client_secret.json for YouTube OAuth (if not done)"
+    echo "  3. Configure license_config.json for license system"
+    echo "  4. Add YouTube account tokens via Settings menu"
+    echo "  5. (Optional) Configure telegram notifications"
     echo ""
-    print_warning "Remember to:"
-    echo "  1. Setup client_secret.json for Google OAuth"
-    echo "  2. Setup license_config.json for license system (optional)"
-    echo "  3. Configure telegram_config.json for notifications (optional)"
-    echo "  4. Change default admin password immediately!"
-    echo "  5. Add YouTube account tokens via Settings menu"
+    print_info "📚 Documentation:"
+    echo "  • README.md - Quick start guide"
+    echo "  • Check repository for detailed setup guides"
     echo ""
-    print_info "For detailed setup instructions, see:"
-    echo "  - SETUP.md (main setup guide)"
-    echo "  - LICENSE_APPSCRIPT_SETUP.md (license system)"
-    echo "  - TELEGRAM_SETUP.md (telegram notifications)"
+    print_info "🎉 Ready to use! Access the app at http://localhost:5000"
     echo ""
 }
 
@@ -319,7 +367,7 @@ main() {
     print_header
     check_root
     check_python
-    check_ffmpeg
+    check_system_deps
     install_python_deps
     check_nodejs
     create_directories
