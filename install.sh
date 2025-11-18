@@ -219,11 +219,15 @@ create_directories() {
     mkdir -p videos/done  # For looped videos
     print_info "Directories created"
     
-    # Initialize SQLite database
-    print_info "Initializing SQLite database..."
-    python3 -c "from modules.database import init_database; init_database(); print('Database initialized successfully')" 2>&1
+    # Initialize SQLite database (runs migrations if exists, creates if not)
+    print_info "Initializing/updating SQLite database..."
+    python3 -c "from modules.database import init_database; init_database(); print('Database ready')" 2>&1
     if [ $? -eq 0 ]; then
-        print_info "Database initialized successfully"
+        if [ -f "jadwalstream.db" ]; then
+            print_info "Database initialized/migrated successfully"
+        else
+            print_info "Database created successfully"
+        fi
     else
         print_error "Failed to initialize database"
         exit 1
@@ -349,10 +353,16 @@ print_final_info() {
     fi
     print_warning "⚠️  Important Next Steps:"
     echo "  1. ⚠️  CHANGE DEFAULT ADMIN PASSWORD IMMEDIATELY!"
-    echo "  2. Add client_secret.json for YouTube OAuth (if not done)"
-    echo "  3. Configure license_config.json for license system"
+    echo "  2. Activate your license key (License menu)"
+    echo "  3. Add client_secret.json for YouTube OAuth (if not done)"
     echo "  4. Add YouTube account tokens via Settings menu"
     echo "  5. (Optional) Configure telegram notifications"
+    echo ""
+    print_info "💡 License System:"
+    echo "  • Fresh install = NO active license"
+    echo "  • You need to activate a license key via License menu"
+    echo "  • license_config.json contains server URL only"
+    echo "  • License data is stored locally in license_cache.json (not in git)"
     echo ""
     print_info "📚 Documentation:"
     echo "  • README.md - Quick start guide"
@@ -362,10 +372,51 @@ print_final_info() {
     echo ""
 }
 
+# Check for existing installation
+check_existing_installation() {
+    print_info "Checking for existing installation..."
+    
+    # Check if database exists
+    if [ -f "jadwalstream.db" ]; then
+        print_warning "Existing installation detected!"
+        echo ""
+        echo "Found existing files:"
+        [ -f "jadwalstream.db" ] && echo "  • jadwalstream.db (database)"
+        [ -f "license_cache.json" ] && echo "  • license_cache.json (license data)"
+        [ -d "videos" ] && [ "$(ls -A videos 2>/dev/null)" ] && echo "  • videos/ (uploaded videos)"
+        [ -d "tokens" ] && [ "$(ls -A tokens 2>/dev/null)" ] && echo "  • tokens/ (YouTube tokens)"
+        echo ""
+        read -p "Do you want to keep existing data? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_warning "This will DELETE all existing data!"
+            read -p "Are you sure? Type 'yes' to confirm: " confirm
+            if [ "$confirm" = "yes" ]; then
+                print_info "Cleaning up old installation..."
+                rm -f jadwalstream.db
+                rm -f license_cache.json
+                rm -f scheduler_status.json
+                rm -f auto_upload_scheduler_status.json
+                rm -rf videos/*
+                rm -rf tokens/*
+                rm -rf ffmpeg_logs/*
+                print_info "Old data removed. Fresh installation will proceed."
+            else
+                print_info "Keeping existing data. Installation will update files only."
+            fi
+        else
+            print_info "Keeping existing data. Installation will update files only."
+        fi
+    else
+        print_info "No existing installation found. Proceeding with fresh install."
+    fi
+}
+
 # Main installation flow
 main() {
     print_header
     check_root
+    check_existing_installation
     check_python
     check_system_deps
     install_python_deps
