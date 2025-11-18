@@ -180,8 +180,8 @@ def role_can_add_streams(role):
 def check_valid_license():
     """Check license validity before each request"""
     # Skip license check for public pages and static files
-    public_endpoints = ['login', 'home', 'register', 'license_page', 'activate_license', 
-                       'verify_license_online', 'get_license_info', 'static']
+    # home is included so users can see the dashboard but with limited functionality
+    public_endpoints = ['login', 'home', 'register', 'static', 'logout']
     
     if request.endpoint in public_endpoints:
         return
@@ -190,20 +190,43 @@ def check_valid_license():
     if not current_user.is_authenticated:
         return
     
-    # Check license validity
+    # License-related endpoints - allow access for admin only
+    license_endpoints = ['license_page', 'activate_license', 'verify_license_online', 'get_license_info']
+    if request.endpoint in license_endpoints:
+        # Check if user is admin
+        from modules.database import get_user_by_id
+        user_data = get_user_by_id(int(current_user.id))
+        if not user_data or not user_data.get('is_admin'):
+            flash('⚠️ Only admin can access license management', 'error')
+            return redirect(url_for('home'))
+        # Admin can access license pages even without valid license
+        return
+    
+    # Check license validity for all other functional pages
     try:
         valid, message = check_license()
         if not valid:
-            # Allow access to license page even if invalid
-            if request.endpoint == 'license_page':
-                return
-            flash(f'⚠️ Lisensi: {message}', 'warning')
-            return redirect(url_for('license_page'))
+            # Check if user is admin - redirect to license page
+            from modules.database import get_user_by_id
+            user_data = get_user_by_id(int(current_user.id))
+            if user_data and user_data.get('is_admin'):
+                flash(f'⚠️ License not active: {message}. Please activate license to use features.', 'error')
+                return redirect(url_for('license_page'))
+            else:
+                # Non-admin users see generic message and stay on home
+                flash('⚠️ Application license is not active. Contact administrator to activate.', 'error')
+                return redirect(url_for('home'))
     except Exception as e:
-        # If license check fails (e.g., file not found), allow access
-        # This prevents app from breaking before first license activation
+        # If license check fails (e.g., file not found), block access
         print(f"License check error: {e}")
-        pass
+        from modules.database import get_user_by_id
+        user_data = get_user_by_id(int(current_user.id))
+        if user_data and user_data.get('is_admin'):
+            flash('⚠️ License system error. Please activate license to use features.', 'error')
+            return redirect(url_for('license_page'))
+        else:
+            flash('⚠️ Application license is not active. Contact administrator.', 'error')
+            return redirect(url_for('home'))
 
 # Ensure video, thumbnail, and tokens folders exist
 os.makedirs(VIDEO_FOLDER, exist_ok=True)
@@ -1339,6 +1362,15 @@ def home():
     if not current_user.is_authenticated:
         return render_template('landing.html')
 
+    # Check license status
+    license_valid = False
+    license_message = ''
+    try:
+        license_valid, license_message = check_license()
+    except:
+        license_valid = False
+        license_message = 'License not configured'
+
     # Get schedules data when authenticated (dashboard)
     try:
         df = pd.read_excel(EXCEL_FILE)
@@ -1350,7 +1382,8 @@ def home():
     user_id = int(current_user.id)
     tokens = get_token_files(user_id)
     
-    return render_template('index.html', schedules=schedules, tokens=tokens)
+    return render_template('index.html', schedules=schedules, tokens=tokens, 
+                         license_valid=license_valid, license_message=license_message)
 
 # API Endpoints for Dashboard
 @app.route('/api/system-stats')
