@@ -13,7 +13,7 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from modules.database.database import get_all_pending_schedules, update_schedule_status, get_user_by_id, get_db_connection
+from modules.database.database import get_all_pending_schedules, update_schedule_status, get_user_by_id, get_db_connection, add_schedule
 from modules.youtube.live import schedule_live_stream
 from modules.youtube.kunci import get_youtube_service
 from modules.services import telegram_notifier
@@ -159,31 +159,57 @@ def process_schedule(schedule):
         # Handle repeat_daily
         if repeat_daily:
             try:
-                # Create new schedule for tomorrow
-                from database import add_schedule
+                # Create new schedule for tomorrow with random metadata from Excel
+                from modules.utils.random_metadata import select_random_metadata, select_random_thumbnail_for_schedule
                 
                 # Parse current scheduled time
                 current_time = datetime.strptime(scheduled_start_time, '%Y-%m-%d %H:%M:%S')
                 next_time = current_time + timedelta(days=1)
                 
+                # Check if random metadata is enabled for this schedule
+                use_random_metadata = bool(schedule.get('use_random_metadata', 0))
+                metadata_excel_file = schedule.get('metadata_excel_file', '')
+                
+                if use_random_metadata:
+                    # Generate new random metadata using specified Excel file or fallback
+                    random_meta = select_random_metadata(user_id, metadata_excel_file or None)
+                    logging.info(f"[SCHEDULE {schedule_id}] 🎲 Using random metadata from Excel: {metadata_excel_file or 'default'}")
+                else:
+                    # Use current metadata without randomization
+                    random_meta = {'title': title, 'description': description}
+                    logging.info(f"[SCHEDULE {schedule_id}] 📝 Using existing metadata (randomization disabled)")
+                
+                random_thumbnail_id = select_random_thumbnail_for_schedule(user_id, 'general')
+                
+                # Create new schedule data with updated metadata
                 new_schedule_data = {
-                    'title': title,
-                    'description': description,
+                    'title': random_meta['title'] if random_meta else title,
+                    'description': random_meta['description'] if random_meta else description,
                     'scheduled_start_time': next_time.strftime('%Y-%m-%d %H:%M:%S'),
                     'video_file': schedule.get('video_file', ''),
-                    'thumbnail': thumbnail,
+                    'thumbnail': random_thumbnail_id if random_thumbnail_id else thumbnail,
                     'stream_name': stream_name,
                     'stream_id': schedule.get('stream_id', ''),
                     'token_file': token_file,
                     'repeat_daily': 1,
-                    'success': 0
+                    'success': 0,
+                    'privacy_status': schedule.get('privacy_status', 'unlisted'),
+                    'auto_start': schedule.get('auto_start', 0),
+                    'auto_stop': schedule.get('auto_stop', 0),
+                    'made_for_kids': schedule.get('made_for_kids', 0),
+                    'playlist_id': schedule.get('playlist_id', ''),  # Preserve playlist selection
+                    'use_random_metadata': schedule.get('use_random_metadata', 0),  # Preserve random metadata setting
+                    'metadata_excel_file': schedule.get('metadata_excel_file', '')  # Preserve Excel file setting
                 }
                 
                 add_schedule(user_id, new_schedule_data)
                 logging.info(f"[SCHEDULE {schedule_id}] ✅ Next schedule created for {next_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                if use_random_metadata and random_meta:
+                    logging.info(f"[SCHEDULE {schedule_id}] 🎲 New title: {random_meta['title']}")
+                    logging.info(f"[SCHEDULE {schedule_id}] 🖼️ New thumbnail: {random_thumbnail_id or 'None'}")
                 
             except Exception as e:
-                logging.error(f"[SCHEDULE {schedule_id}] Failed to create repeat schedule: {e}")
+                logging.error(f"[SCHEDULE {schedule_id}] Failed to create repeat schedule with random metadata: {e}")
         
         logging.info(f"[SCHEDULE {schedule_id}] ✅ COMPLETED SUCCESSFULLY")
         return True

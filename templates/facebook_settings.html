@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Facebook Settings - JadwalStream{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-white mb-2">
+            <i class="fab fa-facebook text-blue-500 mr-2"></i>
+            Facebook Settings
+        </h1>
+        <p class="text-slate-400">Connect your Facebook Pages for video uploads</p>
+    </div>
+
+    <!-- Facebook App Configuration -->
+    <div class="glass-panel rounded-xl p-6 border border-blue-500/20 mb-6">
+        <h2 class="text-xl font-semibold text-white mb-4">
+            <i class="fas fa-cog mr-2 text-blue-400"></i>
+            Facebook App Configuration
+        </h2>
+        
+        <form method="POST" action="{{ url_for('save_facebook_app_config') }}" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-id-card mr-2 text-cyan-400"></i>
+                    App ID
+                </label>
+                <input type="text" name="fb_app_id" value="{{ config.fb_app_id or '' }}"
+                       placeholder="Enter your Facebook App ID"
+                       class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <p class="mt-1 text-xs text-slate-400">
+                    Get this from <a href="https://developers.facebook.com/apps/" target="_blank" class="text-blue-400 hover:text-blue-300 underline">Facebook Developers</a>
+                </p>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-key mr-2 text-yellow-400"></i>
+                    App Secret
+                </label>
+                <input type="password" name="fb_app_secret" value="{{ config.fb_app_secret or '' }}"
+                       placeholder="Enter your Facebook App Secret"
+                       class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            
+            <div class="pt-2">
+                <button type="submit" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+                    <i class="fas fa-save mr-2"></i>
+                    Save Configuration
+                </button>
+            </div>
+        </form>
+        
+        <div class="mt-4 p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
+            <p class="text-sm text-slate-400">
+                <i class="fas fa-info-circle mr-2 text-cyan-400"></i>
+                <strong>Setup Instructions:</strong>
+            </p>
+            <ol class="mt-2 text-xs text-slate-500 list-decimal list-inside space-y-1">
+                <li>Go to <a href="https://developers.facebook.com/apps/" target="_blank" class="text-blue-400 underline">Facebook Developers</a> and create an app</li>
+                <li>Add "Facebook Login" product to your app</li>
+                <li>Set Valid OAuth Redirect URI to: <code class="bg-slate-700 px-1 rounded">{{ request.url_root }}facebook-oauth-callback</code></li>
+                <li>Copy App ID and App Secret here</li>
+                <li>Request <code class="bg-slate-700 px-1 rounded">pages_manage_posts</code> and <code class="bg-slate-700 px-1 rounded">pages_read_engagement</code> permissions</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Connected Pages -->
+    <div class="glass-panel rounded-xl p-6 border border-cyan-500/20 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold text-white">
+                <i class="fas fa-file-alt mr-2 text-cyan-400"></i>
+                Connected Pages
+            </h2>
+            {% if config.fb_app_id and config.fb_app_secret %}
+            <a href="{{ url_for('facebook_oauth_start') }}" 
+               class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+                <i class="fab fa-facebook mr-2"></i>
+                Connect Page
+            </a>
+            {% endif %}
+        </div>
+
+        {% if pages %}
+        <div class="space-y-3">
+            {% for page in pages %}
+            <div class="flex items-center justify-between p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                <div class="flex items-center">
+                    <div class="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center mr-4">
+                        <i class="fab fa-facebook-f text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-white font-medium">{{ page.page_name }}</h3>
+                        <p class="text-sm text-slate-400">Page ID: {{ page.page_id }}</p>
+                        {% if page.expires_at %}
+                        <p class="text-xs text-slate-500">
+                            <i class="fas fa-clock mr-1"></i>
+                            Token expires: {{ page.expires_at }}
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ url_for('facebook_refresh_token', page_id=page.page_id) }}"
+                       class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors">
+                        <i class="fas fa-sync-alt mr-1"></i>
+                        Refresh
+                    </a>
+                    <form method="POST" action="{{ url_for('facebook_disconnect', page_id=page.page_id) }}" 
+                          onsubmit="return confirm('Are you sure you want to disconnect this page?');">
+                        <button type="submit" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors">
+                            <i class="fas fa-unlink mr-1"></i>
+                            Disconnect
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <i class="fab fa-facebook text-slate-600 text-5xl mb-3"></i>
+            <p class="text-slate-400 mb-2">No Facebook Pages connected</p>
+            {% if config.fb_app_id and config.fb_app_secret %}
+            <p class="text-sm text-slate-500">Click "Connect Page" to add your Facebook Page</p>
+            {% else %}
+            <p class="text-sm text-slate-500">Configure your Facebook App first, then connect your pages</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Usage Info -->
+    <div class="glass-panel rounded-xl p-6 border border-purple-500/20">
+        <h2 class="text-xl font-semibold text-white mb-4">
+            <i class="fas fa-question-circle mr-2 text-purple-400"></i>
+            How It Works
+        </h2>
+        
+        <div class="space-y-4 text-sm text-slate-400">
+            <div class="flex items-start">
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-600 text-white text-xs mr-3 mt-0.5">1</span>
+                <p>Connect your Facebook Page by clicking "Connect Page" and authorizing access</p>
+            </div>
+            <div class="flex items-start">
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-600 text-white text-xs mr-3 mt-0.5">2</span>
+                <p>When scheduling videos in Bulk Scheduling, enable "Upload to Facebook" option</p>
+            </div>
+            <div class="flex items-start">
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-600 text-white text-xs mr-3 mt-0.5">3</span>
+                <p>Videos will be uploaded to both YouTube and your selected Facebook Page</p>
+            </div>
+            <div class="flex items-start">
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-600 text-white text-xs mr-3 mt-0.5">4</span>
+                <p>Track upload status for both platforms in the Upload Queue</p>
+            </div>
+        </div>
+        
+        <div class="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <p class="text-sm text-yellow-300">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <strong>Note:</strong> Facebook Page tokens expire after 60 days. Use "Refresh" to extend the token validity.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

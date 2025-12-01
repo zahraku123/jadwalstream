@@ -73,9 +73,10 @@ telegram_config.json
 schedule_config.json
 stream_mapping.json
 
-# Documentation (except README.md)
+# Documentation (except README.md and guide.md)
 *.md
 !README.md
+!guide.md
 
 # License admin files - JANGAN DI-UPLOAD!
 apps_script/

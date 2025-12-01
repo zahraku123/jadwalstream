@@ -56,6 +56,31 @@
             Select Videos
         </h2>
 
+        <!-- Video Filter -->
+        <div class="mb-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-slate-400">
+                    <i class="fas fa-filter mr-2"></i>Filter:
+                </span>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="videoFilter" value="all" x-model="videoFilter" class="mr-2">
+                    <span class="text-slate-300 text-sm">Semua Video</span>
+                </label>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="videoFilter" value="available" x-model="videoFilter" class="mr-2">
+                    <span class="text-slate-300 text-sm">Belum di Queue</span>
+                </label>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="videoFilter" value="queued" x-model="videoFilter" class="mr-2">
+                    <span class="text-slate-300 text-sm">Sudah di Queue</span>
+                </label>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">
+                <i class="fas fa-info-circle mr-1"></i>
+                Video dengan badge <span class="text-yellow-400">"IN QUEUE"</span> sudah ada di Upload Queue (status: queued/uploading)
+            </p>
+        </div>
+
         <!-- Regular Videos Section -->
         {% if regular_videos %}
         <div class="mb-8">
@@ -73,10 +98,12 @@
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {% for video in regular_videos %}
-                <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-cyan-500/50 transition-all">
+                <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-cyan-500/50 transition-all"
+                     x-show="shouldShowVideo('regular_{{ video.id }}')"
+                     x-transition>
                     <!-- Video Preview -->
                     <div class="relative">
-                        <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                        <video width="100%" preload="none" {% if video.thumbnail %}poster="{{ url_for('serve_thumbnail', filename=video.thumbnail) }}"{% endif %} class="w-full aspect-video bg-slate-900">
                             <source src="{{ url_for('serve_video', filename=video.filename) }}#t=0.5">
                             Your browser does not support the video tag.
                         </video>
@@ -88,6 +115,13 @@
                                    data-type="regular"
                                    class="h-5 w-5 text-cyan-600 focus:ring-cyan-500 border-gray-600 rounded bg-dark-card/80 regular-video-checkbox cursor-pointer">
                         </div>
+                        {% if 'regular_' ~ video.id|string in queued_video_ids %}
+                        <div class="absolute top-2 right-2">
+                            <span class="cyber-badge warning text-xs">
+                                <i class="fas fa-clock mr-1"></i>IN QUEUE
+                            </span>
+                        </div>
+                        {% endif %}
                     </div>
                     
                     <!-- Video Info -->
@@ -125,10 +159,12 @@
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {% for video in looped_videos %}
-            <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-pink-500/50 transition-all">
+            <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-pink-500/50 transition-all"
+                 x-show="shouldShowVideo('looped_{{ video.id }}')"
+                 x-transition>
                 <!-- Video Preview -->
                 <div class="relative">
-                    <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                    <video width="100%" preload="none" {% if video.thumbnail %}poster="{{ url_for('serve_thumbnail', filename=video.thumbnail) }}"{% endif %} class="w-full aspect-video bg-slate-900">
                         <source src="{{ url_for('serve_looped_video', filename=video.output_filename) }}#t=0.5">
                         Your browser does not support the video tag.
                     </video>
@@ -140,7 +176,12 @@
                                data-type="looped"
                                class="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-600 rounded bg-dark-card/80 looped-video-checkbox cursor-pointer">
                     </div>
-                    <div class="absolute top-2 right-2">
+                    <div class="absolute top-2 right-2 flex gap-1">
+                        {% if 'looped_' ~ video.id|string in queued_video_ids %}
+                        <span class="cyber-badge warning text-xs">
+                            <i class="fas fa-clock mr-1"></i>IN QUEUE
+                        </span>
+                        {% endif %}
                         <span class="cyber-badge danger text-xs">
                             <i class="fas fa-repeat mr-1"></i>LOOPED
                         </span>
@@ -217,35 +258,120 @@
             <select x-model="metadataMethod" 
                     class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                 <option value="ai">🤖 AI Generated (Gemini)</option>
-                <option value="random">🎲 Random from Excel Templates ({{ metadata_count }} available)</option>
+                <option value="random">🎲 Random from Excel Templates</option>
             </select>
             <p class="mt-1 text-sm text-slate-400">Choose how to generate video metadata</p>
         </div>
 
         <!-- AI Keyword Input (show only for AI method) -->
-        <div x-show="metadataMethod === 'ai'" class="mb-4">
-            <label for="keyword" class="block text-sm font-medium text-slate-300 mb-2">
-                <i class="fas fa-tags mr-2 text-purple-400"></i>
-                Main Keyword
-            </label>
-            <input type="text" 
-                   x-model="keyword" 
-                   id="keyword"
-                   placeholder="e.g., Relaxing Music, Gaming Highlights, Tutorial..."
-                   class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-            <p class="mt-1 text-sm text-slate-400">AI will use this keyword to generate unique metadata for each video</p>
+        <div x-show="metadataMethod === 'ai'" class="space-y-4">
+            <!-- Custom Prompt Selection -->
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-magic mr-2 text-purple-400"></i>
+                    Custom Prompt
+                </label>
+                <select x-model="selectedPromptId" 
+                        class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    <option value="">Use Default Prompt</option>
+                    <template x-for="prompt in customPrompts" :key="prompt.id">
+                        <option :value="prompt.id" x-text="prompt.name"></option>
+                    </template>
+                </select>
+                <div class="flex justify-between items-center mt-1">
+                    <p class="text-xs text-slate-400">Choose a custom prompt preset for AI generation</p>
+                    <a href="{{ url_for('prompt_manager') }}" 
+                       class="text-xs text-purple-400 hover:text-purple-300 underline">
+                        Manage Prompts
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Keyword Input -->
+            <div>
+                <label for="keyword" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-tags mr-2 text-purple-400"></i>
+                    Main Keyword
+                </label>
+                <input type="text" 
+                       x-model="keyword" 
+                       id="keyword"
+                       placeholder="e.g., Relaxing Music, Gaming Highlights, Tutorial..."
+                       class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                <p class="mt-1 text-sm text-slate-400">AI will use this keyword to generate unique metadata for each video</p>
+            </div>
         </div>
 
         <!-- Random Method Info -->
         <div x-show="metadataMethod === 'random'" class="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-            <div class="flex items-start">
+            <div class="flex items-start mb-4">
                 <i class="fas fa-info-circle text-orange-400 mr-2 mt-0.5"></i>
                 <div class="text-sm text-orange-300">
-                    <strong>Random Selection:</strong> System will randomly pick {{ metadata_count }} metadata templates from your Excel file.
-                    {% if metadata_count == 0 %}
+                    <strong>Excel Templates:</strong> Generate metadata from your Excel file.
+                    {% if metadata_count == 0 and not metadata_files %}
                     <br><span class="text-yellow-400">⚠️ No templates available. Please upload Excel file in <a href="{{ url_for('gemini_settings') }}" class="underline">Gemini Settings</a>.</span>
                     {% endif %}
                 </div>
+            </div>
+
+            <!-- Excel File Selection -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-orange-300 mb-2">
+                    <i class="fas fa-file-excel mr-2 text-green-400"></i>
+                    Select Excel Template File
+                </label>
+                <select x-model="selectedExcelFile" 
+                        class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                    {% for file in metadata_files %}
+                    <option value="{{ file.filename }}">{{ file.filename }} ({{ file.count }} items)</option>
+                    {% else %}
+                    <option value="">No Excel files found</option>
+                    {% endfor %}
+                </select>
+                <div class="flex justify-between items-center mt-1">
+                    <p class="text-xs text-slate-400">Choose which Excel file to use</p>
+                    <a href="{{ url_for('gemini_settings') }}" class="text-xs text-orange-400 hover:text-orange-300 underline">
+                        Manage Excel Files
+                    </a>
+                </div>
+            </div>
+
+            <!-- Match Mode Selection -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-orange-300 mb-2">
+                    <i class="fas fa-search mr-2 text-cyan-400"></i>
+                    Metadata Selection Mode
+                </label>
+                <div class="space-y-2">
+                    <label class="flex items-start cursor-pointer p-3 bg-dark-card/50 border border-dark-border rounded-lg hover:border-orange-500/50 transition-colors"
+                           :class="{'border-orange-500': excelMatchMode === 'random'}">
+                        <input type="radio" x-model="excelMatchMode" value="random" class="mt-1 mr-3">
+                        <div>
+                            <span class="text-slate-200 font-medium">🎲 Random Selection</span>
+                            <p class="text-xs text-slate-400 mt-1">Ambil metadata secara acak dari Excel</p>
+                        </div>
+                    </label>
+                    <label class="flex items-start cursor-pointer p-3 bg-dark-card/50 border border-dark-border rounded-lg hover:border-orange-500/50 transition-colors"
+                           :class="{'border-orange-500': excelMatchMode === 'match_title'}">
+                        <input type="radio" x-model="excelMatchMode" value="match_title" class="mt-1 mr-3">
+                        <div>
+                            <span class="text-slate-200 font-medium">🔍 Match by Title</span>
+                            <p class="text-xs text-slate-400 mt-1">Cocokkan nama file video dengan kolom Title di Excel (fuzzy matching)</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Match Mode Info -->
+            <div x-show="excelMatchMode === 'match_title'" class="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-sm">
+                <i class="fas fa-lightbulb text-cyan-400 mr-2"></i>
+                <span class="text-cyan-300">
+                    <strong>Match by Title:</strong> Nama file video akan dicocokkan dengan kolom Title di Excel.
+                    <br><span class="text-xs text-slate-400 mt-1 block">
+                        Contoh: <code class="bg-slate-700 px-1 rounded">12_Hewan_yang_Bisa_Bertahan.mp4</code> → 
+                        <code class="bg-slate-700 px-1 rounded">Hewan yang Bisa Bertahan di Luar Angkasa!</code>
+                    </span>
+                </span>
             </div>
         </div>
 
@@ -264,9 +390,17 @@
             </h3>
             
             <template x-for="(meta, index) in metadata" :key="meta.video_id">
-                <div class="glass-panel rounded-lg p-4 border border-dark-border">
-                    <div class="mb-3">
+                <div class="glass-panel rounded-lg p-4 border border-dark-border"
+                     :class="{'border-green-500/50': meta.matched === true, 'border-yellow-500/50': meta.matched === false && meta.match_score !== undefined}">
+                    <div class="mb-3 flex items-center justify-between">
                         <span class="text-sm text-slate-400">Video #<span x-text="index + 1"></span></span>
+                        <template x-if="meta.match_score !== undefined">
+                            <span class="text-xs px-2 py-1 rounded"
+                                  :class="meta.matched ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'">
+                                <i :class="meta.matched ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'" class="mr-1"></i>
+                                <span x-text="meta.matched ? 'Matched ' + meta.match_score + '%' : 'No Match (' + meta.match_score + '%)'"></span>
+                            </span>
+                        </template>
                     </div>
                     
                     <div class="space-y-3">
@@ -274,21 +408,24 @@
                             <label class="block text-xs font-medium text-slate-400 mb-1">Title</label>
                             <input type="text" 
                                    x-model="meta.title" 
-                                   class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                   class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                                   :class="{'border-yellow-500/50': meta.matched === false}">
                         </div>
                         
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Description</label>
                             <textarea x-model="meta.description" 
                                       rows="3"
-                                      class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"></textarea>
+                                      class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                                      :class="{'border-yellow-500/50': meta.matched === false}"></textarea>
                         </div>
                         
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Tags</label>
                             <input type="text" 
                                    x-model="meta.tags" 
-                                   class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                   class="w-full px-3 py-2 bg-dark-card border border-dark-border rounded text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                                   :class="{'border-yellow-500/50': meta.matched === false}">
                         </div>
                     </div>
                 </div>
@@ -304,16 +441,77 @@
         </h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label for="start_date" class="block text-sm font-medium text-slate-300 mb-2">
-                    <i class="fas fa-calendar mr-2 text-cyan-400"></i>
-                    Start Publish Date
-                </label>
-                <input type="datetime-local" 
-                       x-model="startDate"
-                       id="start_date"
-                       class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
-                <p class="mt-1 text-sm text-slate-400">Each video will be scheduled +1 day from previous</p>
+            <!-- Upload Schedule Settings -->
+            <div class="md:col-span-2 glass-panel p-4 rounded-lg border border-orange-500/20">
+                <h3 class="text-lg font-medium text-white mb-3">
+                    <i class="fas fa-clock text-orange-400 mr-2"></i>
+                    Upload Schedule
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="start_date" class="block text-sm font-medium text-slate-300 mb-2">
+                            Start Date
+                        </label>
+                        <input type="date" 
+                               x-model="startDate"
+                               id="start_date"
+                               class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                    </div>
+                    
+                    <div>
+                        <label for="videos_per_day" class="block text-sm font-medium text-slate-300 mb-2">
+                            Videos per Day
+                        </label>
+                        <input type="number" 
+                               x-model="videosPerDay"
+                               id="videos_per_day"
+                               min="1"
+                               max="10"
+                               class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">
+                            Upload Times
+                        </label>
+                        <div class="space-y-2 max-h-60 overflow-y-auto pr-2">
+                            <template x-for="(slot, index) in uploadTimeSlots" :key="index">
+                                <div class="flex items-center gap-2">
+                                    <input type="text" 
+                                           x-model="slot.time"
+                                           placeholder="HH:MM"
+                                           maxlength="5"
+                                           @input="formatTimeInput($event, index)"
+                                           class="w-24 px-3 py-2 bg-dark-card border border-dark-border rounded-lg text-slate-200 text-center focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                    <select x-model="slot.period"
+                                            class="w-20 px-2 py-2 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                        <option value="AM">AM</option>
+                                        <option value="PM">PM</option>
+                                    </select>
+                                    <button type="button" 
+                                            @click="removeTimeSlot(index)"
+                                            :disabled="uploadTimeSlots.length <= 1"
+                                            class="w-9 h-9 flex items-center justify-center bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors">
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                        <button type="button" 
+                                @click="addTimeSlot()"
+                                class="mt-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors">
+                            <i class="fas fa-plus mr-1"></i> Add Time Slot
+                        </button>
+                        <p class="mt-2 text-xs text-slate-400">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Number of time slots must match videos per day (<span x-text="videosPerDay"></span>)
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded text-sm text-cyan-300">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    <span x-text="getSchedulePreview()"></span>
+                </div>
             </div>
 
             <div>
@@ -322,6 +520,7 @@
                     YouTube Token
                 </label>
                 <select x-model="tokenFile" 
+                        @change="filterPlaylists()"
                         id="token_file"
                         class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
                     <option value="">Select token...</option>
@@ -329,6 +528,11 @@
                     <option value="{{ token }}">{{ token }}</option>
                     {% endfor %}
                 </select>
+                <p class="mt-1 text-xs text-slate-400">
+                    <a href="{{ url_for('playlist_manager') }}" class="text-cyan-400 hover:text-cyan-300">
+                        <i class="fas fa-sync mr-1"></i>Sync Playlists
+                    </a>
+                </p>
             </div>
 
             <div>
@@ -345,19 +549,148 @@
                 </select>
             </div>
 
-            <div>
-                <label for="thumbnail_id" class="block text-sm font-medium text-slate-300 mb-2">
+            <!-- Thumbnail Selection -->
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-slate-300 mb-2">
                     <i class="fas fa-image mr-2 text-pink-400"></i>
-                    Thumbnail (Optional)
+                    Thumbnail Selection
                 </label>
-                <select x-model="thumbnailId" 
-                        id="thumbnail_id"
+                <div class="flex gap-4 mb-3">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" x-model="thumbnailMode" value="specific" class="mr-2">
+                        <span class="text-slate-300">Specific Thumbnail</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" x-model="thumbnailMode" value="tag" class="mr-2">
+                        <span class="text-slate-300">Random by Tag</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" x-model="thumbnailMode" value="none" class="mr-2">
+                        <span class="text-slate-300">None</span>
+                    </label>
+                </div>
+                
+                <div x-show="thumbnailMode === 'specific'">
+                    <select x-model="thumbnailId" 
+                            class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                        <option value="">Select thumbnail...</option>
+                        {% for thumbnail in thumbnails %}
+                        <option value="{{ thumbnail.id }}">{{ thumbnail.title }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div x-show="thumbnailMode === 'tag'">
+                    <select x-model="thumbnailTag" 
+                            class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                        <option value="">Select tag...</option>
+                        {% for tag in thumbnail_tags %}
+                        <option value="{{ tag }}">{{ tag }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="mt-1 text-xs text-slate-400">Each video will get a random thumbnail with this tag</p>
+                </div>
+            </div>
+
+            <!-- Video Category -->
+            <div>
+                <label for="video_category" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-folder text-purple-400 mr-2"></i>
+                    Video Category
+                </label>
+                <select x-model="videoCategory" 
+                        id="video_category"
                         class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
-                    <option value="">None</option>
-                    {% for thumbnail in thumbnails %}
-                    <option value="{{ thumbnail.id }}">{{ thumbnail.title }}</option>
-                    {% endfor %}
+                    <option value="22">People & Blogs</option>
+                    <option value="1">Film & Animation</option>
+                    <option value="2">Autos & Vehicles</option>
+                    <option value="10">Music</option>
+                    <option value="15">Pets & Animals</option>
+                    <option value="17">Sports</option>
+                    <option value="19">Travel & Events</option>
+                    <option value="20">Gaming</option>
+                    <option value="23">Comedy</option>
+                    <option value="24">Entertainment</option>
+                    <option value="25">News & Politics</option>
+                    <option value="26">Howto & Style</option>
+                    <option value="27">Education</option>
+                    <option value="28">Science & Technology</option>
+                    <option value="29">Nonprofits & Activism</option>
                 </select>
+            </div>
+
+            <!-- Playlist Selection -->
+            <div>
+                <label for="playlist_id" class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-list mr-2 text-purple-400"></i>
+                    Playlist (Optional)
+                </label>
+                <select x-model="playlistId" 
+                        id="playlist_id"
+                        :disabled="!tokenFile"
+                        class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:opacity-50">
+                    <option value="">None</option>
+                    <template x-for="playlist in playlists" :key="playlist.playlist_id">
+                        <option :value="playlist.playlist_id" x-text="`${playlist.title} (${playlist.video_count} videos)`"></option>
+                    </template>
+                </select>
+                <p class="mt-1 text-xs text-slate-400" x-show="playlists.length === 0 && tokenFile">
+                    <i class="fas fa-info-circle mr-1"></i>No playlists synced. <a href="{{ url_for('playlist_manager') }}" class="text-cyan-400 hover:text-cyan-300 underline">Sync now</a>
+                </p>
+            </div>
+
+            <!-- YouTube Content Flags -->
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-3">
+                    <i class="fas fa-flag mr-2 text-red-400"></i>
+                    Content Flags
+                </label>
+                <div class="space-y-2">
+                    <label class="flex items-center cursor-pointer text-slate-300 hover:text-white">
+                        <input type="checkbox" x-model="containsSyntheticContent" class="mr-2 h-4 w-4 text-cyan-600 focus:ring-cyan-500 border-gray-600 rounded">
+                        <span class="text-sm">Contains AI/Synthetic Content</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer text-slate-300 hover:text-white">
+                        <input type="checkbox" x-model="madeForKids" class="mr-2 h-4 w-4 text-cyan-600 focus:ring-cyan-500 border-gray-600 rounded">
+                        <span class="text-sm">Made for Kids</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Facebook Upload Option -->
+            <div class="md:col-span-2 glass-panel p-4 rounded-lg border border-blue-500/20">
+                <h3 class="text-lg font-medium text-white mb-3">
+                    <i class="fab fa-facebook text-blue-500 mr-2"></i>
+                    Facebook Upload (Optional)
+                </h3>
+                
+                <div class="space-y-4">
+                    <label class="flex items-center cursor-pointer text-slate-300 hover:text-white">
+                        <input type="checkbox" x-model="fbEnabled" class="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-600 rounded">
+                        <span class="text-sm">Also upload to Facebook Page</span>
+                    </label>
+                    
+                    <div x-show="fbEnabled" x-transition>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">
+                            Select Facebook Page
+                        </label>
+                        {% if facebook_pages %}
+                        <select x-model="fbPageId" 
+                                class="w-full px-4 py-3 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Select page...</option>
+                            {% for page in facebook_pages %}
+                            <option value="{{ page.page_id }}">{{ page.page_name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <div class="p-3 bg-slate-800/50 border border-slate-700 rounded-lg text-sm text-slate-400">
+                            <i class="fas fa-info-circle mr-2 text-blue-400"></i>
+                            No Facebook Pages connected. 
+                            <a href="{{ url_for('facebook_settings') }}" class="text-blue-400 hover:text-blue-300 underline">Connect a page</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -389,11 +722,42 @@ function bulkScheduling() {
         gemini_configured: {{ 'true' if gemini_configured else 'false' }},
         metadataMethod: 'ai',
         metadataCount: {{ metadata_count }},
+        selectedExcelFile: '{% if metadata_files %}{{ metadata_files[0].filename }}{% endif %}',
         startDate: '',
+        videosPerDay: 3,
+        uploadTimeSlots: [
+            { time: '10:00', period: 'AM' },
+            { time: '12:00', period: 'PM' },
+            { time: '03:00', period: 'PM' }
+        ],
         tokenFile: '',
         streamId: '',
+        thumbnailMode: 'none',
         thumbnailId: '',
+        thumbnailTag: '',
+        videoCategory: '22',
+        playlistId: '',
+        allPlaylists: {{ playlist_cache | tojson }},
+        playlists: [],
+        containsSyntheticContent: false,
+        madeForKids: false,
         privacyStatus: 'unlisted',
+        customPrompts: {{ custom_prompts | tojson }},
+        selectedPromptId: '',
+        videoFilter: 'all',
+        queuedVideoIds: {{ queued_video_ids | default([]) | tojson }},
+        fbEnabled: false,
+        fbPageId: '',
+        excelMatchMode: 'random',
+        
+        // Check if video should be shown based on filter
+        shouldShowVideo(videoId) {
+            const isQueued = this.queuedVideoIds.includes(videoId);
+            if (this.videoFilter === 'all') return true;
+            if (this.videoFilter === 'available') return !isQueued;
+            if (this.videoFilter === 'queued') return isQueued;
+            return true;
+        },
         
         // Toggle all regular videos
         toggleAllRegular(checked) {
@@ -433,7 +797,7 @@ function bulkScheduling() {
             if (this.metadataMethod === 'ai') {
                 return !this.gemini_configured || !this.keyword;
             } else {
-                return this.metadataCount === 0;
+                return !this.selectedExcelFile;
             }
         },
 
@@ -448,8 +812,8 @@ function bulkScheduling() {
                 return;
             }
 
-            if (this.metadataMethod === 'random' && this.metadataCount === 0) {
-                alert('No metadata templates available. Please upload Excel file in Gemini Settings.');
+            if (this.metadataMethod === 'random' && !this.selectedExcelFile) {
+                alert('No Excel template selected. Please upload Excel file in Gemini Settings.');
                 return;
             }
 
@@ -463,6 +827,25 @@ function bulkScheduling() {
                 
                 if (this.metadataMethod === 'ai') {
                     formData.append('keyword', this.keyword);
+                    formData.append('selected_prompt_id', this.selectedPromptId);
+                } else if (this.metadataMethod === 'random') {
+                    formData.append('excel_file', this.selectedExcelFile);
+                    formData.append('match_mode', this.excelMatchMode);
+                    
+                    // For match_title mode, send video titles
+                    if (this.excelMatchMode === 'match_title') {
+                        this.selectedVideos.forEach(videoId => {
+                            // Get video title from the page
+                            const videoCard = document.querySelector(`[value="${videoId}"]`);
+                            if (videoCard) {
+                                const titleEl = videoCard.closest('.glass-panel').querySelector('h3');
+                                const title = titleEl ? titleEl.textContent.trim() : videoId;
+                                formData.append('video_titles[]', title);
+                            } else {
+                                formData.append('video_titles[]', videoId);
+                            }
+                        });
+                    }
                 }
 
                 const endpoint = this.metadataMethod === 'ai' 
@@ -478,8 +861,22 @@ function bulkScheduling() {
 
                 if (result.success) {
                     this.metadata = result.metadata;
-                    const method = this.metadataMethod === 'ai' ? 'AI' : 'Random';
-                    alert(`✅ Successfully generated ${method} metadata for ${result.metadata.length} videos!`);
+                    
+                    if (this.metadataMethod === 'ai') {
+                        alert(`✅ Successfully generated AI metadata for ${result.metadata.length} videos!`);
+                    } else if (result.match_mode === 'match_title') {
+                        const matched = result.matched_count || 0;
+                        const unmatched = result.unmatched_count || 0;
+                        if (unmatched === 0) {
+                            alert(`✅ Match by Title berhasil!\n\n✓ ${matched} video berhasil dicocokkan dengan Excel.`);
+                        } else if (matched === 0) {
+                            alert(`❌ Match by Title gagal!\n\n✗ ${unmatched} video tidak ditemukan kecocokan.\n\nSilakan isi metadata secara manual.`);
+                        } else {
+                            alert(`⚠️ Match by Title selesai!\n\n✓ Matched: ${matched} videos\n✗ Unmatched: ${unmatched} videos\n\nVideo yang tidak cocok memiliki metadata kosong - silakan isi manual.`);
+                        }
+                    } else {
+                        alert(`✅ Successfully generated Random metadata for ${result.metadata.length} videos!`);
+                    }
                 } else {
                     alert('❌ Error: ' + result.error);
                 }
@@ -491,11 +888,126 @@ function bulkScheduling() {
             }
         },
 
+        getSchedulePreview() {
+            if (!this.metadata.length || !this.videosPerDay) {
+                return 'Select videos and set schedule to see preview';
+            }
+            const totalVideos = this.metadata.length;
+            const days = Math.ceil(totalVideos / this.videosPerDay);
+            return `${totalVideos} videos will be uploaded over ${days} days (${this.videosPerDay} videos/day)`;
+        },
+
+        filterPlaylists() {
+            if (!this.tokenFile) {
+                this.playlists = [];
+                return;
+            }
+            
+            // Filter playlists by selected token
+            this.playlists = this.allPlaylists.filter(p => p.token_file === this.tokenFile);
+        },
+
+        formatTimeInput(event, index) {
+            let value = event.target.value.replace(/[^0-9:]/g, '');
+            
+            // Auto-add colon after 2 digits
+            if (value.length === 2 && !value.includes(':')) {
+                value = value + ':';
+            }
+            
+            // Validate and format
+            if (value.length === 5) {
+                const parts = value.split(':');
+                let hours = parseInt(parts[0]) || 0;
+                let minutes = parseInt(parts[1]) || 0;
+                
+                // Convert to 12-hour format
+                if (hours > 12) {
+                    hours = hours - 12;
+                    this.uploadTimeSlots[index].period = 'PM';
+                } else if (hours === 0) {
+                    hours = 12;
+                    this.uploadTimeSlots[index].period = 'AM';
+                }
+                
+                // Clamp values
+                hours = Math.min(12, Math.max(1, hours));
+                minutes = Math.min(59, Math.max(0, minutes));
+                
+                value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            }
+            
+            this.uploadTimeSlots[index].time = value;
+        },
+
+        addTimeSlot() {
+            this.uploadTimeSlots.push({ time: '09:00', period: 'AM' });
+        },
+
+        removeTimeSlot(index) {
+            if (this.uploadTimeSlots.length > 1) {
+                this.uploadTimeSlots.splice(index, 1);
+            } else {
+                alert('At least one time slot is required');
+            }
+        },
+
+        convertTo24Hour(time, period) {
+            // Validate time format
+            if (!time || !time.includes(':')) {
+                return '09:00'; // default
+            }
+            
+            const parts = time.split(':');
+            if (parts.length !== 2) {
+                return '09:00';
+            }
+            
+            let hours = parseInt(parts[0]) || 0;
+            let minutes = parseInt(parts[1]) || 0;
+            
+            // Clamp values
+            hours = Math.min(12, Math.max(1, hours));
+            minutes = Math.min(59, Math.max(0, minutes));
+            
+            // Convert to 24-hour
+            if (period === 'PM' && hours !== 12) {
+                hours += 12;
+            } else if (period === 'AM' && hours === 12) {
+                hours = 0;
+            }
+            
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        },
+
         async addToQueue() {
             if (!this.startDate || !this.tokenFile) {
                 alert('Please fill in start date and token');
                 return;
             }
+
+            // Validate upload times
+            if (this.uploadTimeSlots.length !== parseInt(this.videosPerDay)) {
+                alert(`Number of time slots (${this.uploadTimeSlots.length}) must match videos per day (${this.videosPerDay})`);
+                return;
+            }
+
+            // Validate each time slot
+            for (let i = 0; i < this.uploadTimeSlots.length; i++) {
+                const slot = this.uploadTimeSlots[i];
+                if (!slot.time || !slot.time.includes(':')) {
+                    alert(`Invalid time format in slot ${i + 1}. Use HH:MM format (e.g., 09:00)`);
+                    return;
+                }
+            }
+
+            // Convert time slots to 24-hour format
+            const times24h = this.uploadTimeSlots.map(slot => 
+                this.convertTo24Hour(slot.time, slot.period)
+            );
+            const uploadTimesStr = times24h.join(', ');
+            
+            console.log('Upload times (24h):', uploadTimesStr);
 
             this.saving = true;
 
@@ -503,10 +1015,19 @@ function bulkScheduling() {
                 const data = {
                     videos: this.metadata,
                     start_date: this.startDate,
+                    videos_per_day: this.videosPerDay,
+                    upload_times: uploadTimesStr,
                     token_file: this.tokenFile,
                     stream_id: this.streamId,
-                    thumbnail_id: this.thumbnailId,
-                    privacy_status: this.privacyStatus
+                    thumbnail_id: this.thumbnailMode === 'specific' ? this.thumbnailId : '',
+                    thumbnail_tag: this.thumbnailMode === 'tag' ? this.thumbnailTag : '',
+                    video_category: this.videoCategory,
+                    playlist_id: this.playlistId,
+                    contains_synthetic_content: this.containsSyntheticContent,
+                    made_for_kids: this.madeForKids,
+                    privacy_status: this.privacyStatus,
+                    fb_enabled: this.fbEnabled,
+                    fb_page_id: this.fbPageId
                 };
 
                 const response = await fetch('{{ url_for("save_bulk_upload_queue_route") }}', {

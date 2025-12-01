@@ -165,6 +165,57 @@
             </div>
         </form>
 
+        <!-- Uploaded Files List -->
+        {% if metadata_files %}
+        <div class="mt-8 border-t border-dark-border pt-6">
+            <h4 class="text-md font-semibold text-white mb-4">
+                <i class="fas fa-list text-slate-400 mr-2"></i>
+                Uploaded Templates
+            </h4>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-slate-300">
+                    <thead>
+                        <tr class="text-xs text-slate-500 uppercase border-b border-dark-border">
+                            <th class="text-left py-2">Filename</th>
+                            <th class="text-center py-2">Templates</th>
+                            <th class="text-center py-2">Size</th>
+                            <th class="text-right py-2">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file in metadata_files %}
+                        <tr class="border-b border-dark-border/50 hover:bg-dark-card/30 transition-colors">
+                            <td class="py-3">
+                                <div class="flex items-center">
+                                    <i class="fas fa-file-excel text-green-500 mr-2"></i>
+                                    <span class="truncate max-w-[200px]" title="{{ file.filename }}">{{ file.filename }}</span>
+                                </div>
+                            </td>
+                            <td class="text-center py-3">
+                                <span class="px-2 py-1 bg-dark-card rounded text-xs">{{ file.count }}</span>
+                            </td>
+                            <td class="text-center py-3 text-xs text-slate-500">
+                                {{ (file.size / 1024)|round(1) }} KB
+                            </td>
+                            <td class="text-right py-3">
+                                {% if file.filename != 'default.xlsx' %}
+                                <form action="{{ url_for('delete_metadata_excel', filename=file.filename) }}" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to delete this file?');">
+                                    <button type="submit" class="text-red-400 hover:text-red-300 transition-colors p-1">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="text-slate-600 text-xs italic">Default</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
             <p class="text-sm text-blue-400">
                 <i class="fas fa-info-circle mr-2"></i>

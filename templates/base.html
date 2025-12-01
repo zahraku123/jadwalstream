@@ -23,7 +23,7 @@
     
     <div class="min-h-full relative z-10">
         <!-- Navbar Top -->
-        <nav class="glass-panel shadow-lg border-b border-cyan-500/20">
+        <nav class="glass-panel shadow-lg border-b border-cyan-500/20 relative z-50">
             <div class="mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex justify-between h-16">
                     <div class="flex">
@@ -48,8 +48,20 @@
                                 <i class="fas fa-chevron-down text-slate-400 text-xs ml-2"></i>
                             </button>
                             
-                            <div x-show="open" @click.away="open = false" x-cloak class="origin-top-right absolute right-0 mt-2 w-48 rounded-lg shadow-xl bg-dark-card border border-dark-border">
+                            <div x-show="open" @click.away="open = false" x-cloak class="origin-top-right absolute right-0 mt-2 w-48 rounded-lg shadow-xl bg-dark-card border border-dark-border z-50">
                                 <div class="py-1">
+                                    <a href="{{ url_for('playlist_manager') }}" class="flex items-center px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white rounded-lg transition-colors">
+                                        <i class="fas fa-list mr-3 text-purple-400"></i>
+                                        Playlist Manager
+                                    </a>
+                                    <a href="{{ url_for('prompt_manager') }}" class="flex items-center px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white rounded-lg transition-colors">
+                                        <i class="fas fa-magic mr-3 text-purple-400"></i>
+                                        Prompt Manager
+                                    </a>
+                                    <a href="{{ url_for('user_guide') }}" class="flex items-center px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white rounded-lg transition-colors">
+                                        <i class="fas fa-book mr-3 text-indigo-400"></i>
+                                        Panduan Lengkap
+                                    </a>
                                     <a href="{{ url_for('profile') }}" class="flex items-center px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
                                         <i class="fas fa-user-circle mr-3 text-cyan-400"></i>
                                         Profile
@@ -66,9 +78,9 @@
             </div>
         </nav>
 
-        <div class="flex h-[calc(100vh-4rem)]">
+        <div class="flex h-[calc(100vh-4rem)] relative z-0">
             <!-- Sidebar -->
-            <aside id="sidebar" class="hidden md:flex md:flex-shrink-0">
+            <aside id="sidebar" class="hidden md:flex md:flex-shrink-0 z-10">
                 <div class="flex flex-col w-64 glass-panel border-r border-cyan-500/20">
                     <div class="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
                         <nav class="mt-5 flex-1 px-3 space-y-1">
@@ -143,6 +155,11 @@
                                 Stream Keys
                             </a>
                             
+                            <a href="{{ url_for('playlist_manager') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fas fa-list mr-3 text-purple-400 group-hover:text-purple-300"></i>
+                                Playlist Manager
+                            </a>
+                            
 
                             
                             <a href="{{ url_for('gemini_settings') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
@@ -153,6 +170,16 @@
                             <a href="{{ url_for('telegram_settings') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
                                 <i class="fab fa-telegram mr-3 text-blue-400 group-hover:text-blue-300"></i>
                                 Telegram Notifications
+                            </a>
+
+                            <a href="{{ url_for('facebook_settings') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fab fa-facebook mr-3 text-blue-500 group-hover:text-blue-400"></i>
+                                Facebook Settings
+                            </a>
+                            
+                            <a href="{{ url_for('user_guide') }}" class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200">
+                                <i class="fas fa-book mr-3 text-indigo-400 group-hover:text-indigo-300"></i>
+                                Panduan Lengkap
                             </a>
 
                             {% if current_user.role == 'admin' %}

@@ -105,6 +105,14 @@ ALLOWED_THUMBNAIL_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 LIVE_STREAMS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'live_streams.json')
 TOKENS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tokens')
 STREAM_TIMERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stream_timers.json')
+
+# Metadata Excel files directory
+METADATA_EXCEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metadata_excel_files')
+METADATA_EXCEL_FILE = os.path.join(METADATA_EXCEL_DIR, 'default.xlsx')
+
+# Create metadata excel directory if it doesn't exist
+os.makedirs(METADATA_EXCEL_DIR, exist_ok=True)
+
 RTMP_SERVERS = {
     'youtube': 'rtmp://a.rtmp.youtube.com/live2/',
     'facebook': 'rtmps://live-api-s.facebook.com:443/rtmp/',
@@ -956,9 +964,15 @@ def edit_schedule(index):
         tokens = get_token_files(user_id)
         stream_mapping = get_stream_mapping()
         thumbnails = get_thumbnail_database()
+        metadata_files = get_available_metadata_files(user_id)
+
+        # Add random metadata fields
+        schedule['use_random_metadata'] = bool(db_schedule.get('use_random_metadata', 0))
+        schedule['metadata_excel_file'] = db_schedule.get('metadata_excel_file', '')
         
         return render_template('edit_schedule.html', schedule=schedule, index=schedule_id, 
-                             tokens=tokens, stream_mapping=stream_mapping, thumbnails=thumbnails)
+                             tokens=tokens, stream_mapping=stream_mapping, thumbnails=thumbnails,
+                             metadata_files=metadata_files)
     except Exception as e:
         flash(f'Error: {str(e)}', 'error')
         return redirect(url_for('schedules'))
@@ -1003,7 +1017,9 @@ def update_schedule(index):
             'auto_start': 1 if data.get('autoStart') == 'on' else 0,
             'auto_stop': 1 if data.get('autoStop') == 'on' else 0,
             'made_for_kids': 1 if data.get('madeForKids') == 'on' else 0,
-            'repeat_daily': 1 if data.get('repeat_daily') == 'on' else 0
+            'repeat_daily': 1 if data.get('repeat_daily') == 'on' else 0,
+            'use_random_metadata': 1 if data.get('useRandomMetadata') == 'on' else 0,
+            'metadata_excel_file': data.get('metadataExcelFile', '').strip()
         }
         
         db_update_schedule(schedule_id, user_id, updates)
@@ -1166,6 +1182,211 @@ def fetch_stream_keys():
         flash(f'Error: {str(e)}', 'error')
     
     return redirect(url_for('stream_keys'))
+
+@app.route('/playlist-manager')
+@login_required
+def playlist_manager():
+    """Playlist management page"""
+    from modules.database import get_all_playlist_cache
+    
+    user_id = int(current_user.id)
+    tokens = get_token_files(user_id)
+    playlists = get_all_playlist_cache(user_id)
+    
+    return render_template('playlist_manager.html', 
+                         tokens=tokens,
+                         playlists=playlists)
+
+@app.route('/sync-playlists', methods=['POST'])
+@login_required
+@demo_readonly
+def sync_playlists():
+    """Sync playlists from YouTube"""
+    from modules.youtube.kunci import get_youtube_service
+    from modules.database import save_playlist_cache
+    
+    user_id = int(current_user.id)
+    token_file = request.form.get('token_file')
+    
+    if not token_file:
+        flash('Please select a token file', 'error')
+        return redirect(url_for('playlist_manager'))
+    
+    try:
+        # Get full token path
+        token_path = get_token_path(token_file, user_id)
+        
+        if not os.path.exists(token_path):
+            flash(f'Token file not found: {token_file}', 'error')
+            return redirect(url_for('playlist_manager'))
+        
+        # Get YouTube service
+        youtube = get_youtube_service(token_path)
+        
+        # Fetch playlists
+        playlists = []
+        request_obj = youtube.playlists().list(
+            part='snippet,contentDetails',
+            mine=True,
+            maxResults=50
+        )
+        
+        while request_obj:
+            response = request_obj.execute()
+            
+            for item in response.get('items', []):
+                playlists.append({
+                    'id': item['id'],
+                    'title': item['snippet']['title'],
+                    'video_count': item['contentDetails']['itemCount']
+                })
+            
+            request_obj = youtube.playlists().list_next(request_obj, response)
+            if not request_obj:
+                break
+        
+        # Save to cache
+        if playlists:
+            count = save_playlist_cache(user_id, token_file, playlists)
+            flash(f'Successfully synced {count} playlist(s) from YouTube!', 'success')
+        else:
+            flash('No playlists found in this channel', 'warning')
+            
+    except Exception as e:
+        logging.error(f"Error syncing playlists: {e}")
+        flash(f'Error: {str(e)}', 'error')
+    
+    return redirect(url_for('playlist_manager'))
+
+@app.route('/delete-playlist-cache', methods=['POST'])
+@login_required
+@demo_readonly
+def delete_playlist_cache():
+    """Delete playlist from cache"""
+    try:
+        from modules.database import delete_playlist_cache_item
+        
+        user_id = int(current_user.id)
+        data = request.get_json()
+        cache_id = data.get('cache_id')
+        
+        if not cache_id:
+            return jsonify({'success': False, 'error': 'Cache ID required'}), 400
+        
+        success = delete_playlist_cache_item(cache_id, user_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Playlist removed from cache'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to remove playlist'}), 400
+            
+    except Exception as e:
+        logging.error(f"Error deleting playlist cache: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ============= CUSTOM PROMPTS ROUTES =============
+
+@app.route('/prompt-manager')
+@login_required
+def prompt_manager():
+    """Prompt Manager page"""
+    from modules.database import get_custom_prompts
+    
+    user_id = int(current_user.id)
+    prompts = get_custom_prompts(user_id)
+    
+    return render_template('prompt_manager.html', prompts=prompts)
+
+@app.route('/api/custom-prompts', methods=['GET'])
+@login_required
+def get_custom_prompts_api():
+    """Get custom prompts for user"""
+    try:
+        from modules.database import get_custom_prompts
+        
+        user_id = int(current_user.id)
+        prompts = get_custom_prompts(user_id)
+        
+        return jsonify({'success': True, 'prompts': prompts})
+        
+    except Exception as e:
+        logging.error(f"Error getting custom prompts: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/custom-prompts', methods=['POST'])
+@login_required
+@demo_readonly
+def add_custom_prompt_api():
+    """Add new custom prompt"""
+    try:
+        from modules.database import add_custom_prompt
+        
+        user_id = int(current_user.id)
+        data = request.get_json()
+        
+        name = data.get('name', '').strip()
+        prompt_text = data.get('prompt_text', '').strip()
+        is_default = data.get('is_default', False)
+        
+        if not name or not prompt_text:
+            return jsonify({'success': False, 'error': 'Name and prompt text are required'}), 400
+        
+        prompt_id = add_custom_prompt(user_id, name, prompt_text, is_default)
+        
+        return jsonify({'success': True, 'message': 'Custom prompt added', 'prompt_id': prompt_id})
+        
+    except Exception as e:
+        logging.error(f"Error adding custom prompt: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/custom-prompts/<int:prompt_id>', methods=['PUT'])
+@login_required
+@demo_readonly
+def update_custom_prompt_api(prompt_id):
+    """Update custom prompt"""
+    try:
+        from modules.database import update_custom_prompt
+        
+        user_id = int(current_user.id)
+        data = request.get_json()
+        
+        name = data.get('name', '').strip()
+        prompt_text = data.get('prompt_text', '').strip()
+        is_default = data.get('is_default', False)
+        
+        if not name or not prompt_text:
+            return jsonify({'success': False, 'error': 'Name and prompt text are required'}), 400
+        
+        success = update_custom_prompt(user_id, prompt_id, name, prompt_text, is_default)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Custom prompt updated'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to update prompt'}), 400
+        
+    except Exception as e:
+        logging.error(f"Error updating custom prompt: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/custom-prompts/<int:prompt_id>', methods=['DELETE'])
+@login_required
+@demo_readonly
+def delete_custom_prompt_api(prompt_id):
+    """Delete custom prompt"""
+    try:
+        from modules.database import delete_custom_prompt
+        
+        user_id = int(current_user.id)
+        success = delete_custom_prompt(user_id, prompt_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Custom prompt deleted'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to delete prompt'}), 400
+        
+    except Exception as e:
+        logging.error(f"Error deleting custom prompt: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/create_new_stream', methods=['POST'])
 @login_required
@@ -1335,6 +1556,13 @@ def license_page():
                          valid=valid,
                          message=message,
                          days_remaining=days)
+
+
+@app.route('/guide')
+@login_required
+def user_guide():
+    """Halaman panduan lengkap penggunaan JadwalStream"""
+    return render_template('user_guide.html')
 
 
 # Helper function to get user usage for templates
@@ -1857,6 +2085,58 @@ def delete_video(video_id):
     
     return redirect(url_for('video_gallery'))
 
+@app.route('/bulk-delete-videos', methods=['POST'])
+@login_required
+@demo_readonly
+def bulk_delete_videos():
+    """Delete multiple videos"""
+    data = request.get_json()
+    video_ids = data.get('ids', [])
+    
+    if not video_ids:
+        return jsonify({'success': False, 'error': 'No videos selected'}), 400
+        
+    success_count = 0
+    fail_count = 0
+    
+    videos = get_video_database()
+    from modules.database import delete_video_from_db
+    
+    for video_id in video_ids:
+        # Find video
+        video_to_delete = None
+        for v in videos:
+            if v['id'] == video_id:
+                video_to_delete = v
+                break
+        
+        if video_to_delete:
+            try:
+                # Delete file
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], video_to_delete['filename'])
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                
+                # Delete thumbnail if exists
+                if video_to_delete.get('thumbnail'):
+                    thumbnail_path = os.path.join(THUMBNAIL_FOLDER, video_to_delete['thumbnail'])
+                    if os.path.exists(thumbnail_path):
+                        os.remove(thumbnail_path)
+                
+                # Delete from DB
+                delete_video_from_db(video_id)
+                success_count += 1
+            except Exception as e:
+                logging.error(f"Error deleting video {video_id}: {e}")
+                fail_count += 1
+        else:
+            fail_count += 1
+            
+    return jsonify({
+        'success': True,
+        'message': f'Deleted {success_count} videos ({fail_count} failed)'
+    })
+
 @app.route('/videos/<filename>')
 @login_required
 def serve_video(filename):
@@ -1963,6 +2243,101 @@ def delete_thumbnail(thumbnail_id):
         flash('Thumbnail not found', 'danger')
     
     return redirect(url_for('thumbnail_gallery'))
+
+@app.route('/update-thumbnail-tags', methods=['POST'])
+@login_required
+@demo_readonly
+def update_thumbnail_tags_route():
+    """Update thumbnail tags"""
+    from modules.database import update_thumbnail_tags
+    
+    user_id = int(current_user.id)
+    thumbnail_id = request.form.get('thumbnail_id')
+    tags_str = request.form.get('tags', '')
+    
+    # Parse tags (comma-separated)
+    tags = [tag.strip() for tag in tags_str.split(',') if tag.strip()]
+    
+    success = update_thumbnail_tags(thumbnail_id, user_id, tags)
+    
+    if success:
+        return jsonify({'success': True, 'message': 'Tags updated successfully'})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to update tags'}), 400
+
+@app.route('/bulk-delete-thumbnails', methods=['POST'])
+@login_required
+@demo_readonly
+def bulk_delete_thumbnails():
+    """Delete multiple thumbnails"""
+    data = request.get_json()
+    thumbnail_ids = data.get('ids', [])
+    
+    if not thumbnail_ids:
+        return jsonify({'success': False, 'error': 'No thumbnails selected'}), 400
+        
+    success_count = 0
+    fail_count = 0
+    
+    thumbnails = get_thumbnail_database()
+    from modules.database import delete_thumbnail_from_db
+    
+    for thumbnail_id in thumbnail_ids:
+        # Find thumbnail
+        thumbnail_to_delete = None
+        for t in thumbnails:
+            if t['id'] == thumbnail_id:
+                thumbnail_to_delete = t
+                break
+        
+        if thumbnail_to_delete:
+            try:
+                # Delete file
+                file_path = os.path.join(THUMBNAIL_FOLDER, thumbnail_to_delete['filename'])
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                
+                # Delete from DB
+                delete_thumbnail_from_db(thumbnail_id)
+                success_count += 1
+            except Exception as e:
+                logging.error(f"Error deleting thumbnail {thumbnail_id}: {e}")
+                fail_count += 1
+        else:
+            fail_count += 1
+            
+    return jsonify({
+        'success': True, 
+        'message': f'Deleted {success_count} thumbnails ({fail_count} failed)'
+    })
+
+@app.route('/bulk-update-thumbnail-tags', methods=['POST'])
+@login_required
+@demo_readonly
+def bulk_update_thumbnail_tags():
+    """Update tags for multiple thumbnails"""
+    data = request.get_json()
+    thumbnail_ids = data.get('ids', [])
+    tags_str = data.get('tags', '')
+    
+    if not thumbnail_ids:
+        return jsonify({'success': False, 'error': 'No thumbnails selected'}), 400
+        
+    # Parse tags
+    tags = [tag.strip() for tag in tags_str.split(',') if tag.strip()]
+    
+    from modules.database import update_thumbnail_tags
+    user_id = int(current_user.id)
+    
+    success_count = 0
+    for thumbnail_id in thumbnail_ids:
+        if update_thumbnail_tags(thumbnail_id, user_id, tags):
+            success_count += 1
+            
+    return jsonify({
+        'success': True,
+        'message': f'Updated tags for {success_count} thumbnails'
+    })
 
 @app.route('/thumbnails/<filename>')
 @login_required
@@ -2228,7 +2603,7 @@ def admin_users():
         if action == 'create':
             username = request.form.get('username', '').strip()
             password = request.form.get('password', '').strip()
-            role_new = request.form.get('role', 'demo').strip().lower()
+            role_new = request.form.get('role', 'user').strip().lower()
             max_streams = int(request.form.get('max_streams', 3))
             max_storage_mb = int(request.form.get('max_storage_mb', 2000))
             expiry_days = request.form.get('expiry_days', '').strip()
@@ -2249,7 +2624,7 @@ def admin_users():
             flash(msg, 'success' if ok else 'error')
         elif action == 'update_role':
             username = request.form.get('username')
-            role_new = request.form.get('role', 'demo').strip().lower()
+            role_new = request.form.get('role', 'user').strip().lower()
             ok, msg = change_role(username, role_new)
             flash(msg, 'success' if ok else 'error')
         elif action == 'delete':
@@ -2338,6 +2713,12 @@ def schedules():
     # Get thumbnails
     thumbnails = get_thumbnail_database()
     
+    # Get playlist options for user
+    from modules.utils.random_metadata import get_playlist_options, get_all_thumbnail_tags
+    playlist_options = get_playlist_options(user_id)
+    thumbnail_tags = get_all_thumbnail_tags(user_id)
+    metadata_files = get_available_metadata_files(user_id)
+    
     # Get scheduler status and config (per-user)
     role = getattr(current_user, 'role', 'user')
     scheduler_status = get_scheduler_status()
@@ -2349,6 +2730,9 @@ def schedules():
                          stream_mapping=stream_mapping, 
                          tokens=tokens, 
                          thumbnails=thumbnails,
+                         playlist_options=playlist_options,
+                         thumbnail_tags=thumbnail_tags,
+                         metadata_files=metadata_files,
                          scheduler_status=scheduler_status,
                          schedule_times=schedule_times,
                          is_admin=is_admin)
@@ -2386,6 +2770,23 @@ def add_schedule():
         if thumbnail_file and not thumbnail_file.startswith('thumbnails/'):
             thumbnail_file = f'thumbnails/{thumbnail_file}'
         
+        # Handle thumbnail selection mode
+        thumbnail_mode = data.get('thumbnailMode', 'specific')
+        selected_thumbnail = ''
+        thumbnail_tag = ''
+        
+        if thumbnail_mode == 'specific':
+            # Use specific thumbnail selected
+            selected_thumbnail = thumbnail_file
+        elif thumbnail_mode == 'tag':
+            # Use random thumbnail by tag
+            thumbnail_tag = data.get('thumbnailTag', '').strip()
+            if thumbnail_tag:
+                from modules.utils.random_metadata import select_random_thumbnail_for_schedule
+                random_thumb = select_random_thumbnail_for_schedule(user_id, 'general')
+                selected_thumbnail = random_thumb if random_thumb else ''
+        # For 'none' mode, selected_thumbnail stays empty
+        
         # Insert into database instead of Excel
         from modules.database import add_schedule
         schedule_data = {
@@ -2393,7 +2794,7 @@ def add_schedule():
             'description': data.get('description', ''),
             'scheduled_start_time': data['scheduledStartTime'],
             'video_file': data.get('videoFile', ''),
-            'thumbnail': thumbnail_file,
+            'thumbnail': selected_thumbnail,
             'stream_name': resolved_stream,
             'stream_id': data.get('streamIdExisting', ''),
             'token_file': data['tokenFile'],
@@ -2402,7 +2803,10 @@ def add_schedule():
             'auto_start': 1 if data.get('autoStart') == 'on' else 0,
             'auto_stop': 1 if data.get('autoStop') == 'on' else 0,
             'made_for_kids': 1 if data.get('madeForKids') == 'on' else 0,
-            'success': 0
+            'success': 0,
+            'playlist_id': data.get('playlistId', '').strip(),
+            'use_random_metadata': 1 if data.get('useRandomMetadata') == 'on' else 0,
+            'metadata_excel_file': data.get('metadataExcelFile', '').strip()
         }
         
         add_schedule(user_id, schedule_data)
@@ -2974,24 +3378,76 @@ def load_gemini_config(user_id=None):
     except:
         return None
 
-def get_metadata_from_excel():
-    """Load metadata templates from Excel file"""
-    if not os.path.exists(METADATA_EXCEL_FILE):
+def get_user_metadata_dir(user_id):
+    """Get user-specific metadata Excel directory"""
+    user_dir = os.path.join(METADATA_EXCEL_DIR, f'user_{user_id}')
+    os.makedirs(user_dir, exist_ok=True)
+    return user_dir
+
+def get_metadata_from_excel(excel_filename=None, user_id=None):
+    """Load metadata templates from Excel file - reads by column header names"""
+    if user_id:
+        user_dir = get_user_metadata_dir(user_id)
+        excel_file = os.path.join(user_dir, excel_filename) if excel_filename else None
+    else:
+        excel_file = os.path.join(METADATA_EXCEL_DIR, excel_filename) if excel_filename else METADATA_EXCEL_FILE
+    
+    if not excel_file or not os.path.exists(excel_file):
         return []
     
     try:
         import openpyxl
-        workbook = openpyxl.load_workbook(METADATA_EXCEL_FILE)
+        workbook = openpyxl.load_workbook(excel_file)
         sheet = workbook.active
         
+        # Read header row to find column indices
+        header_row = [cell.value for cell in sheet[1]]
+        
+        # Find column indices by header name (case-insensitive)
+        video_path_idx = None
+        title_idx = None
+        desc_idx = None
+        tags_idx = None
+        
+        for idx, header in enumerate(header_row):
+            if header:
+                header_lower = str(header).lower().strip()
+                if header_lower in ['video_path', 'videopath', 'path', 'file', 'filename']:
+                    video_path_idx = idx
+                elif header_lower in ['title', 'judul', 'nama', 'name', 'video_title']:
+                    title_idx = idx
+                elif header_lower in ['description', 'deskripsi', 'desc', 'video_description']:
+                    desc_idx = idx
+                elif header_lower in ['tags', 'tag', 'keywords', 'keyword', 'video_tags']:
+                    tags_idx = idx
+        
+        # Fallback to first 3 columns if headers not found
+        if title_idx is None:
+            title_idx = 0
+        if desc_idx is None:
+            desc_idx = 1 if len(header_row) > 1 else None
+        if tags_idx is None:
+            tags_idx = 2 if len(header_row) > 2 else None
+        
         metadata_list = []
-        # Skip header row, start from row 2
+        # Start from row 2 (skip header)
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            if row[0]:  # If title exists
+            title_val = row[title_idx] if title_idx is not None and title_idx < len(row) else None
+            if title_val:  # If title exists
+                # Get video_path for matching (extract filename without extension)
+                video_path = ''
+                if video_path_idx is not None and video_path_idx < len(row) and row[video_path_idx]:
+                    path = str(row[video_path_idx])
+                    # Extract filename without extension
+                    import re
+                    filename = os.path.basename(path)
+                    video_path = os.path.splitext(filename)[0]
+                
                 metadata_list.append({
-                    'title': str(row[0]) if row[0] else '',
-                    'description': str(row[1]) if row[1] else '',
-                    'tags': str(row[2]) if row[2] else ''
+                    'video_path': video_path,
+                    'title': str(title_val) if title_val else '',
+                    'description': str(row[desc_idx]) if desc_idx is not None and desc_idx < len(row) and row[desc_idx] else '',
+                    'tags': str(row[tags_idx]) if tags_idx is not None and tags_idx < len(row) and row[tags_idx] else ''
                 })
         
         return metadata_list
@@ -2999,11 +3455,43 @@ def get_metadata_from_excel():
         logging.error(f"Error reading Excel metadata: {e}")
         return []
 
-def get_random_metadata(count=1):
+def get_available_metadata_files(user_id=None):
+    """Get list of available metadata Excel files for user"""
+    files = []
+    try:
+        if user_id:
+            user_dir = get_user_metadata_dir(user_id)
+        else:
+            user_dir = METADATA_EXCEL_DIR
+            
+        if not os.path.exists(user_dir):
+            return []
+            
+        for filename in os.listdir(user_dir):
+            if filename.endswith(('.xlsx', '.xls')):
+                file_path = os.path.join(user_dir, filename)
+                try:
+                    # Get file info
+                    file_info = {
+                        'filename': filename,
+                        'name': filename.replace('.xlsx', '').replace('.xls', ''),
+                        'size': os.path.getsize(file_path),
+                        'modified': os.path.getmtime(file_path),
+                        'count': len(get_metadata_from_excel(filename, user_id))
+                    }
+                    files.append(file_info)
+                except Exception as e:
+                    logging.warning(f"Error reading file info for {filename}: {e}")
+        return sorted(files, key=lambda x: x['modified'], reverse=True)
+    except Exception as e:
+        logging.error(f"Error listing metadata files: {e}")
+        return []
+
+def get_random_metadata(excel_filename=None, count=1, user_id=None):
     """Get random metadata from Excel file"""
     import random
     
-    metadata_list = get_metadata_from_excel()
+    metadata_list = get_metadata_from_excel(excel_filename, user_id)
     if not metadata_list:
         return []
     
@@ -3012,6 +3500,152 @@ def get_random_metadata(count=1):
         return random.sample(metadata_list, count)
     else:
         return random.choices(metadata_list, k=count)
+
+def normalize_title(title):
+    """Normalize title for matching - remove special chars, lowercase, etc."""
+    import re
+    import os
+    if not title:
+        return ''
+    
+    # If it looks like a path, extract just the filename
+    if '/' in title or '\\' in title:
+        title = os.path.basename(title)
+    
+    # Convert to lowercase
+    normalized = title.lower()
+    
+    # Remove file extension if present
+    normalized = re.sub(r'\.(mp4|avi|mov|mkv|wmv|flv|webm|m4v)$', '', normalized, flags=re.IGNORECASE)
+    
+    # Remove leading numbers and underscores (e.g., "12_" or "001_")
+    normalized = re.sub(r'^[\d_]+', '', normalized)
+    
+    # Replace underscores and hyphens with spaces
+    normalized = re.sub(r'[_\-]+', ' ', normalized)
+    
+    # Remove special characters except spaces
+    normalized = re.sub(r'[^\w\s]', '', normalized)
+    
+    # Remove extra whitespace
+    normalized = ' '.join(normalized.split())
+    
+    return normalized.strip()
+
+def match_title_similarity(video_title, excel_title):
+    """Calculate similarity - requires 4+ consecutive words match, handles truncated titles"""
+    
+    # Normalize both titles
+    norm_video = normalize_title(video_title)
+    norm_excel = normalize_title(excel_title)
+    
+    if not norm_video or not norm_excel:
+        return 0.0
+    
+    # Exact match
+    if norm_video == norm_excel:
+        return 1.0
+    
+    video_words = norm_video.split()
+    excel_words = norm_excel.split()
+    
+    if len(video_words) < 4 or len(excel_words) < 4:
+        # If less than 4 words, check if one contains the other
+        if norm_video in norm_excel or norm_excel in norm_video:
+            shorter = min(len(norm_video), len(norm_excel))
+            longer = max(len(norm_video), len(norm_excel))
+            return shorter / longer if longer > 0 else 0.0
+        return 0.0
+    
+    # Find longest consecutive word match (with partial last word support)
+    max_consecutive = 0
+    
+    for i in range(len(video_words)):
+        for j in range(len(excel_words)):
+            consecutive = 0
+            vi, ej = i, j
+            while vi < len(video_words) and ej < len(excel_words):
+                v_word = video_words[vi]
+                e_word = excel_words[ej]
+                
+                # Exact match
+                if v_word == e_word:
+                    consecutive += 1
+                    vi += 1
+                    ej += 1
+                # Partial match for last word (truncated title support)
+                # e.g., "y" matches start of "yang", "tern" matches start of "ternyata"
+                elif vi == len(video_words) - 1 and len(v_word) >= 1 and e_word.startswith(v_word):
+                    consecutive += 1
+                    vi += 1
+                    ej += 1
+                else:
+                    break
+            max_consecutive = max(max_consecutive, consecutive)
+    
+    # Require at least 4 consecutive words to match
+    if max_consecutive >= 4:
+        # Score based on how many words matched vs total
+        total_words = max(len(video_words), len(excel_words))
+        return max_consecutive / total_words
+    
+    return 0.0
+
+def get_matched_metadata(excel_filename, video_titles, user_id=None):
+    """Match video titles with Excel metadata by VIDEO_PATH (exact filename match)"""
+    metadata_list = get_metadata_from_excel(excel_filename, user_id)
+    if not metadata_list:
+        return []
+    
+    # Build lookup dict by video_path (filename without extension)
+    path_lookup = {}
+    for idx, metadata in enumerate(metadata_list):
+        video_path = metadata.get('video_path', '')
+        if video_path:
+            path_lookup[video_path.lower()] = (idx, metadata)
+    
+    matched_results = []
+    used_indices = set()
+    
+    for video_title in video_titles:
+        # video_title is the filename (without extension) from the video
+        video_key = video_title.lower().strip()
+        
+        # Try exact match first
+        if video_key in path_lookup and path_lookup[video_key][0] not in used_indices:
+            idx, metadata = path_lookup[video_key]
+            matched_results.append({
+                'metadata': metadata,
+                'score': 1.0,
+                'matched': True
+            })
+            used_indices.add(idx)
+        else:
+            # No match found
+            matched_results.append({
+                'metadata': None,
+                'score': 0.0,
+                'matched': False
+            })
+    
+    return matched_results
+
+def delete_metadata_excel_file(filename, user_id=None):
+    """Delete metadata Excel file"""
+    try:
+        if user_id:
+            user_dir = get_user_metadata_dir(user_id)
+            file_path = os.path.join(user_dir, filename)
+        else:
+            file_path = os.path.join(METADATA_EXCEL_DIR, filename)
+            
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return True
+        return False
+    except Exception as e:
+        logging.error(f"Error deleting metadata file {filename}: {e}")
+        return False
 
 def get_auto_upload_config(user_id=None):
     """Get auto upload scheduler configuration - PER USER"""
@@ -3023,7 +3657,7 @@ def get_auto_upload_config(user_id=None):
                 cursor = conn.cursor()
                 cursor.execute('''
                     SELECT auto_upload_enabled, auto_upload_offset_hours, 
-                           auto_upload_check_interval 
+                           auto_upload_check_interval, auto_delete_after_upload 
                     FROM users WHERE id = ?
                 ''', (user_id,))
                 row = cursor.fetchone()
@@ -3032,20 +3666,21 @@ def get_auto_upload_config(user_id=None):
                     return {
                         'enabled': bool(row['auto_upload_enabled']),
                         'upload_offset_hours': row['auto_upload_offset_hours'] or 2,
-                        'check_interval_minutes': row['auto_upload_check_interval'] or 30
+                        'check_interval_minutes': row['auto_upload_check_interval'] or 30,
+                        'auto_delete_after_upload': bool(row['auto_delete_after_upload']) if row['auto_delete_after_upload'] is not None else False
                     }
         except Exception as e:
             logging.error(f"Error loading auto upload config for user {user_id}: {e}")
     
     # Fallback to global config file (legacy)
     if not os.path.exists(AUTO_UPLOAD_CONFIG_FILE):
-        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 30}
+        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 30, 'auto_delete_after_upload': False}
     
     try:
         with open(AUTO_UPLOAD_CONFIG_FILE, 'r') as f:
             return json.load(f)
     except:
-        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 30}
+        return {'enabled': False, 'upload_offset_hours': 2, 'check_interval_minutes': 30, 'auto_delete_after_upload': False}
 
 def save_auto_upload_config(config, user_id=None):
     """Save auto upload scheduler configuration - PER USER"""
@@ -3059,12 +3694,14 @@ def save_auto_upload_config(config, user_id=None):
                     UPDATE users 
                     SET auto_upload_enabled = ?,
                         auto_upload_offset_hours = ?,
-                        auto_upload_check_interval = ?
+                        auto_upload_check_interval = ?,
+                        auto_delete_after_upload = ?
                     WHERE id = ?
                 ''', (
                     1 if config.get('enabled') else 0,
                     config.get('upload_offset_hours', 2),
                     config.get('check_interval_minutes', 30),
+                    1 if config.get('auto_delete_after_upload') else 0,
                     user_id
                 ))
                 conn.commit()
@@ -3384,6 +4021,244 @@ def bulk_delete_looped_videos():
         logging.error(f"Error bulk deleting looped videos: {e}")
         return jsonify({'success': False, 'message': str(e)})
 
+# ============= FACEBOOK SETTINGS ROUTES =============
+
+@app.route('/facebook-settings')
+@login_required
+def facebook_settings():
+    """Facebook settings page - PER USER"""
+    from modules.database import get_facebook_pages, get_db_connection
+    
+    user_id = int(current_user.id)
+    pages = get_facebook_pages(user_id)
+    
+    # Get Facebook app config from user settings
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT fb_app_id, fb_app_secret FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+        config = {
+            'fb_app_id': row['fb_app_id'] if row and row['fb_app_id'] else '',
+            'fb_app_secret': row['fb_app_secret'] if row and row['fb_app_secret'] else ''
+        } if row else {}
+    
+    return render_template('facebook_settings.html', pages=pages, config=config)
+
+@app.route('/save-facebook-app-config', methods=['POST'])
+@login_required
+@demo_readonly
+def save_facebook_app_config():
+    """Save Facebook App configuration"""
+    from modules.database import get_db_connection
+    
+    user_id = int(current_user.id)
+    fb_app_id = request.form.get('fb_app_id', '').strip()
+    fb_app_secret = request.form.get('fb_app_secret', '').strip()
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE users SET fb_app_id = ?, fb_app_secret = ? WHERE id = ?
+        ''', (fb_app_id, fb_app_secret, user_id))
+        conn.commit()
+    
+    flash('Facebook App configuration saved!', 'success')
+    return redirect(url_for('facebook_settings'))
+
+@app.route('/facebook-oauth-start')
+@login_required
+def facebook_oauth_start():
+    """Start Facebook OAuth flow"""
+    from modules.database import get_db_connection
+    
+    user_id = int(current_user.id)
+    
+    # Get app credentials
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT fb_app_id, fb_app_secret FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+    
+    if not row or not row['fb_app_id'] or not row['fb_app_secret']:
+        flash('Please configure Facebook App ID and Secret first', 'error')
+        return redirect(url_for('facebook_settings'))
+    
+    app_id = row['fb_app_id']
+    redirect_uri = url_for('facebook_oauth_callback', _external=True)
+    
+    # Request permissions for page management
+    scope = 'pages_manage_posts,pages_read_engagement,pages_show_list'
+    
+    oauth_url = f"https://www.facebook.com/v19.0/dialog/oauth?client_id={app_id}&redirect_uri={redirect_uri}&scope={scope}&response_type=code"
+    
+    return redirect(oauth_url)
+
+@app.route('/facebook-oauth-callback')
+@login_required
+def facebook_oauth_callback():
+    """Handle Facebook OAuth callback"""
+    import requests
+    from modules.database import get_db_connection, add_facebook_page
+    from datetime import datetime, timedelta
+    
+    user_id = int(current_user.id)
+    code = request.args.get('code')
+    error = request.args.get('error')
+    
+    if error:
+        flash(f'Facebook authorization failed: {request.args.get("error_description", error)}', 'error')
+        return redirect(url_for('facebook_settings'))
+    
+    if not code:
+        flash('No authorization code received', 'error')
+        return redirect(url_for('facebook_settings'))
+    
+    # Get app credentials
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT fb_app_id, fb_app_secret FROM users WHERE id = ?', (user_id,))
+        row = cursor.fetchone()
+    
+    app_id = row['fb_app_id']
+    app_secret = row['fb_app_secret']
+    redirect_uri = url_for('facebook_oauth_callback', _external=True)
+    
+    try:
+        # Exchange code for access token
+        token_url = f"https://graph.facebook.com/v19.0/oauth/access_token"
+        token_params = {
+            'client_id': app_id,
+            'client_secret': app_secret,
+            'redirect_uri': redirect_uri,
+            'code': code
+        }
+        token_response = requests.get(token_url, params=token_params)
+        token_data = token_response.json()
+        
+        if 'error' in token_data:
+            flash(f'Failed to get access token: {token_data["error"]["message"]}', 'error')
+            return redirect(url_for('facebook_settings'))
+        
+        user_access_token = token_data['access_token']
+        
+        # Get long-lived token
+        long_token_url = f"https://graph.facebook.com/v19.0/oauth/access_token"
+        long_token_params = {
+            'grant_type': 'fb_exchange_token',
+            'client_id': app_id,
+            'client_secret': app_secret,
+            'fb_exchange_token': user_access_token
+        }
+        long_token_response = requests.get(long_token_url, params=long_token_params)
+        long_token_data = long_token_response.json()
+        
+        long_lived_token = long_token_data.get('access_token', user_access_token)
+        expires_in = long_token_data.get('expires_in', 5184000)  # Default 60 days
+        
+        # Get user's pages
+        pages_url = f"https://graph.facebook.com/v19.0/me/accounts"
+        pages_params = {'access_token': long_lived_token}
+        pages_response = requests.get(pages_url, params=pages_params)
+        pages_data = pages_response.json()
+        
+        if 'error' in pages_data:
+            flash(f'Failed to get pages: {pages_data["error"]["message"]}', 'error')
+            return redirect(url_for('facebook_settings'))
+        
+        pages = pages_data.get('data', [])
+        
+        if not pages:
+            flash('No Facebook Pages found. Make sure you have admin access to at least one Page.', 'warning')
+            return redirect(url_for('facebook_settings'))
+        
+        # Save all pages with their access tokens
+        added_count = 0
+        for page in pages:
+            page_id = page['id']
+            page_name = page['name']
+            page_access_token = page['access_token']
+            expires_at = (datetime.now() + timedelta(seconds=expires_in)).strftime('%Y-%m-%d %H:%M:%S')
+            
+            add_facebook_page(user_id, page_id, page_name, page_access_token, expires_at)
+            added_count += 1
+        
+        flash(f'Successfully connected {added_count} Facebook Page(s)!', 'success')
+        
+    except Exception as e:
+        logging.error(f"Facebook OAuth error: {e}")
+        flash(f'Error connecting Facebook: {str(e)}', 'error')
+    
+    return redirect(url_for('facebook_settings'))
+
+@app.route('/facebook-disconnect/<page_id>', methods=['POST'])
+@login_required
+@demo_readonly
+def facebook_disconnect(page_id):
+    """Disconnect a Facebook Page"""
+    from modules.database import delete_facebook_page
+    
+    user_id = int(current_user.id)
+    
+    if delete_facebook_page(user_id, page_id):
+        flash('Facebook Page disconnected successfully', 'success')
+    else:
+        flash('Failed to disconnect Facebook Page', 'error')
+    
+    return redirect(url_for('facebook_settings'))
+
+@app.route('/facebook-refresh-token/<page_id>')
+@login_required
+def facebook_refresh_token(page_id):
+    """Refresh Facebook Page token"""
+    flash('To refresh the token, please disconnect and reconnect the page.', 'info')
+    return redirect(url_for('facebook_settings'))
+
+def upload_to_facebook(page_id, access_token, video_path, title, description, scheduled_time=None):
+    """Upload video to Facebook Page"""
+    import requests
+    
+    try:
+        # Facebook Graph API video upload endpoint
+        upload_url = f"https://graph.facebook.com/v19.0/{page_id}/videos"
+        
+        params = {
+            'access_token': access_token,
+            'title': title[:255] if title else '',  # FB title max 255 chars
+            'description': description[:5000] if description else ''  # FB desc max 5000 chars
+        }
+        
+        # If scheduled, set publish time
+        if scheduled_time:
+            # Convert to Unix timestamp
+            if isinstance(scheduled_time, str):
+                scheduled_dt = datetime.strptime(scheduled_time, '%Y-%m-%d %H:%M:%S')
+                scheduled_dt = pytz.timezone(TIMEZONE).localize(scheduled_dt)
+            else:
+                scheduled_dt = scheduled_time
+            
+            unix_timestamp = int(scheduled_dt.timestamp())
+            params['scheduled_publish_time'] = unix_timestamp
+            params['published'] = 'false'
+        
+        with open(video_path, 'rb') as video_file:
+            files = {'source': video_file}
+            response = requests.post(upload_url, data=params, files=files, timeout=3600)
+        
+        result = response.json()
+        
+        if 'error' in result:
+            return {'success': False, 'error': result['error'].get('message', 'Unknown error')}
+        
+        return {
+            'success': True,
+            'video_id': result.get('id'),
+            'post_id': result.get('post_id')
+        }
+        
+    except Exception as e:
+        logging.error(f"Facebook upload error: {e}")
+        return {'success': False, 'error': str(e)}
+
 @app.route('/gemini-settings', methods=['GET', 'POST'])
 @login_required
 def gemini_settings():
@@ -3412,9 +4287,13 @@ def gemini_settings():
         return redirect(url_for('gemini_settings'))
     
     config = load_gemini_config(user_id=user_id) or {}
-    metadata_count = len(get_metadata_from_excel())
+    metadata_count = len(get_metadata_from_excel(user_id=user_id))
     config['metadata_count'] = metadata_count
-    return render_template('gemini_settings.html', config=config)
+    
+    # Get available metadata files
+    metadata_files = get_available_metadata_files(user_id)
+    
+    return render_template('gemini_settings.html', config=config, metadata_files=metadata_files)
 
 @app.route('/bulk-scheduling')
 @login_required
@@ -3437,17 +4316,49 @@ def bulk_scheduling():
     gemini_config = load_gemini_config(user_id=user_id)
     gemini_configured = gemini_config and gemini_config.get('api_key')
     
-    # Check if metadata Excel exists
-    metadata_count = len(get_metadata_from_excel())
+    # Get available metadata Excel files
+    metadata_files = get_available_metadata_files(user_id)
+    
+    # Check if metadata Excel exists (default count)
+    metadata_count = len(get_metadata_from_excel(user_id=user_id))
+    
+    # Get all thumbnail tags
+    from modules.database import get_all_thumbnail_tags, get_playlist_cache, get_custom_prompts, get_bulk_upload_queue, get_facebook_pages
+    thumbnail_tags = get_all_thumbnail_tags(user_id)
+    
+    # Get cached playlists
+    playlist_cache = get_playlist_cache(user_id)
+    
+    # Get custom prompts
+    custom_prompts = get_custom_prompts(user_id)
+    
+    # Get Facebook pages
+    facebook_pages = get_facebook_pages(user_id)
+    
+    # Get video IDs already in upload queue (not completed/failed)
+    upload_queue = get_bulk_upload_queue(user_id)
+    queued_video_ids = set()
+    for item in upload_queue:
+        if item.get('status') in ['queued', 'uploading']:
+            video_id = item.get('video_id')
+            video_type = item.get('video_type', 'regular')
+            if video_id:
+                queued_video_ids.add(f"{video_type}_{video_id}")
     
     return render_template('bulk_scheduling.html', 
                          looped_videos=completed_looped,
                          regular_videos=regular_videos,
                          tokens=tokens,
                          thumbnails=thumbnails,
+                         thumbnail_tags=thumbnail_tags,
+                         playlist_cache=playlist_cache,
+                         custom_prompts=custom_prompts,
                          stream_mapping=stream_mapping,
                          gemini_configured=gemini_configured,
-                         metadata_count=metadata_count)
+                         metadata_files=metadata_files,
+                         metadata_count=metadata_count,
+                         queued_video_ids=list(queued_video_ids),
+                         facebook_pages=facebook_pages)
 
 @app.route('/generate-ai-metadata', methods=['POST'])
 @login_required
@@ -3457,6 +4368,7 @@ def generate_ai_metadata():
     user_id = int(current_user.id)
     video_ids = request.form.getlist('video_ids[]')
     keyword = request.form.get('keyword', '').strip()
+    selected_prompt_id = request.form.get('selected_prompt_id', '').strip()
     
     if not video_ids:
         return jsonify({'success': False, 'error': 'Pilih minimal satu video'}), 400
@@ -3515,11 +4427,24 @@ def generate_ai_metadata():
             else:
                 video_title = video.get('title', 'Unknown')
             
-            # Use custom prompt if available
-            custom_prompt = gemini_config.get('custom_prompt')
+            # Get custom prompt if selected
+            custom_prompt_text = None
+            if selected_prompt_id:
+                from modules.database import get_custom_prompts
+                user_prompts = get_custom_prompts(user_id)
+                selected_prompt = next((p for p in user_prompts if str(p['id']) == selected_prompt_id), None)
+                if selected_prompt:
+                    custom_prompt_text = selected_prompt['prompt_text']
             
-            if custom_prompt:
+            # Use custom prompt from database, then from config, then default
+            if custom_prompt_text:
                 # Replace placeholders in custom prompt
+                prompt = custom_prompt_text.replace('{keyword}', keyword)
+                prompt = prompt.replace('{index}', str(idx))
+                prompt = prompt.replace('{original_title}', video_title)
+            elif gemini_config.get('custom_prompt'):
+                # Use config custom prompt as fallback
+                custom_prompt = gemini_config.get('custom_prompt')
                 prompt = custom_prompt.replace('{keyword}', keyword)
                 prompt = prompt.replace('{index}', str(idx))
                 prompt = prompt.replace('{original_title}', video_title)
@@ -3600,39 +4525,95 @@ Format your response exactly like this:
 @login_required
 @demo_readonly
 def generate_random_metadata():
-    """Generate metadata using random selection from Excel"""
+    """Generate metadata using random selection or title matching from Excel - per user"""
+    user_id = int(current_user.id)
     video_ids = request.form.getlist('video_ids[]')
+    excel_file = request.form.get('excel_file')
+    match_mode = request.form.get('match_mode', 'random')  # 'random' or 'match_title'
+    video_titles = request.form.getlist('video_titles[]')  # Original video titles for matching
     
     if not video_ids:
         return jsonify({'success': False, 'error': 'Pilih minimal satu video'}), 400
     
     try:
-        # Get random metadata
-        random_metadata = get_random_metadata(count=len(video_ids))
-        
-        if not random_metadata:
-            return jsonify({'success': False, 'error': 'File Excel metadata tidak ditemukan atau kosong. Upload file Excel di halaman Gemini Settings.'}), 400
-        
         generated_metadata = []
-        for idx, video_id in enumerate(video_ids):
-            metadata = random_metadata[idx]
-            generated_metadata.append({
-                'video_id': video_id,
-                'title': metadata['title'],
-                'description': metadata['description'],
-                'tags': metadata['tags']
+        
+        if match_mode == 'match_title':
+            # Match by title mode
+            if not video_titles or len(video_titles) != len(video_ids):
+                return jsonify({'success': False, 'error': 'Video titles required for matching mode'}), 400
+            
+            matched_results = get_matched_metadata(excel_file, video_titles, user_id)
+            
+            if not matched_results:
+                return jsonify({'success': False, 'error': 'File Excel metadata tidak ditemukan atau kosong.'}), 400
+            
+            matched_count = 0
+            unmatched_count = 0
+            
+            for idx, video_id in enumerate(video_ids):
+                result = matched_results[idx]
+                
+                if result['matched'] and result['metadata']:
+                    metadata = result['metadata']
+                    matched_count += 1
+                    generated_metadata.append({
+                        'video_id': video_id,
+                        'title': metadata['title'],
+                        'description': metadata['description'],
+                        'tags': metadata['tags'],
+                        'match_score': round(result['score'] * 100, 1),
+                        'matched': True
+                    })
+                else:
+                    unmatched_count += 1
+                    # For unmatched, use video title as fallback
+                    generated_metadata.append({
+                        'video_id': video_id,
+                        'title': video_titles[idx] if idx < len(video_titles) else f'Video {idx + 1}',
+                        'description': '',
+                        'tags': '',
+                        'match_score': round(result['score'] * 100, 1),
+                        'matched': False
+                    })
+            
+            return jsonify({
+                'success': True, 
+                'metadata': generated_metadata,
+                'match_mode': 'match_title',
+                'matched_count': matched_count,
+                'unmatched_count': unmatched_count
             })
         
-        return jsonify({'success': True, 'metadata': generated_metadata})
+        else:
+            # Random mode (default)
+            random_metadata_list = get_random_metadata(excel_filename=excel_file, count=len(video_ids), user_id=user_id)
+            
+            if not random_metadata_list:
+                return jsonify({'success': False, 'error': 'File Excel metadata tidak ditemukan atau kosong. Upload file Excel di halaman Gemini Settings.'}), 400
+            
+            for idx, video_id in enumerate(video_ids):
+                metadata = random_metadata_list[idx]
+                generated_metadata.append({
+                    'video_id': video_id,
+                    'title': metadata['title'],
+                    'description': metadata['description'],
+                    'tags': metadata['tags']
+                })
+            
+            return jsonify({'success': True, 'metadata': generated_metadata, 'match_mode': 'random'})
         
     except Exception as e:
+        logging.error(f"Error generating metadata: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/upload-metadata-excel', methods=['POST'])
 @login_required
 @demo_readonly
 def upload_metadata_excel():
-    """Upload Excel file with metadata templates"""
+    """Upload Excel file with metadata templates - per user"""
+    user_id = int(current_user.id)
+    
     if 'excel_file' not in request.files:
         flash('No file uploaded', 'error')
         return redirect(url_for('gemini_settings'))
@@ -3646,24 +4627,100 @@ def upload_metadata_excel():
         flash('File must be Excel format (.xlsx or .xls)', 'error')
         return redirect(url_for('gemini_settings'))
     
+    # Generate unique filename and use user-specific directory
+    import time
+    user_dir = get_user_metadata_dir(user_id)
+    file_id = str(int(time.time()))  # timestamp-based ID
+    filename = file.filename.replace('.xlsx', f'_{file_id}.xlsx').replace('.xls', f'_{file_id}.xls')
+    file_path = os.path.join(user_dir, filename)
+    
     try:
         # Save the file
-        file.save(METADATA_EXCEL_FILE)
+        file.save(file_path)
         
         # Validate the file
-        metadata_list = get_metadata_from_excel()
+        metadata_list = get_metadata_from_excel(filename, user_id)
         
         if not metadata_list:
-            os.remove(METADATA_EXCEL_FILE)
-            flash('Excel file is empty or invalid format. Please check: Column A=Title, B=Description, C=Tags', 'error')
+            os.remove(file_path)
+            flash('Excel file is empty or invalid format. Please check columns: Title, Description, Tags', 'error')
             return redirect(url_for('gemini_settings'))
         
         flash(f'Excel metadata uploaded successfully! {len(metadata_list)} templates loaded.', 'success')
         return redirect(url_for('gemini_settings'))
         
     except Exception as e:
+        # Clean up file if upload failed
+        if os.path.exists(file_path):
+            os.remove(file_path)
         flash(f'Error uploading Excel: {str(e)}', 'error')
         return redirect(url_for('gemini_settings'))
+
+@app.route('/delete_metadata_excel/<filename>', methods=['POST'])
+@login_required
+@demo_readonly
+def delete_metadata_excel(filename):
+    """Delete metadata Excel file - per user"""
+    user_id = int(current_user.id)
+    
+    try:
+        if delete_metadata_excel_file(filename, user_id):
+            flash(f'Metadata file "{filename}" deleted successfully', 'success')
+        else:
+            flash('Failed to delete metadata file', 'error')
+        
+        return redirect(url_for('gemini_settings'))
+    except Exception as e:
+        flash(f'Error deleting metadata file: {str(e)}', 'error')
+        return redirect(url_for('gemini_settings'))
+
+@app.route('/api/fetch-playlists', methods=['POST'])
+@login_required
+def fetch_playlists():
+    """Fetch playlists from YouTube for selected token"""
+    try:
+        user_id = int(current_user.id)
+        token_file = request.json.get('token_file')
+        
+        if not token_file:
+            return jsonify({'success': False, 'error': 'Token file required'}), 400
+        
+        # Get YouTube service
+        from modules.youtube.kunci import get_youtube_service
+        token_path = os.path.join('tokens', f'user_{user_id}', token_file)
+        
+        if not os.path.exists(token_path):
+            return jsonify({'success': False, 'error': 'Token file not found'}), 404
+        
+        youtube = get_youtube_service(token_path)
+        
+        # Fetch playlists
+        playlists = []
+        request_obj = youtube.playlists().list(
+            part='snippet,contentDetails',
+            mine=True,
+            maxResults=50
+        )
+        
+        while request_obj:
+            response = request_obj.execute()
+            
+            for item in response.get('items', []):
+                playlists.append({
+                    'id': item['id'],
+                    'title': item['snippet']['title'],
+                    'video_count': item['contentDetails']['itemCount']
+                })
+            
+            request_obj = youtube.playlists().list_next(request_obj, response)
+            if not request_obj:
+                break
+        
+        return jsonify({'success': True, 'playlists': playlists})
+        
+    except Exception as e:
+        logging.error(f"Error fetching playlists: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/save-bulk-upload-queue', methods=['POST'])
 @login_required
@@ -3687,15 +4744,51 @@ def save_bulk_upload_queue_route():
         token_file = data.get('token_file')
         stream_id = data.get('stream_id')
         thumbnail_id = data.get('thumbnail_id')
+        thumbnail_tag = data.get('thumbnail_tag')
+        video_category = data.get('video_category', '22')
+        playlist_id = data.get('playlist_id')
+        contains_synthetic_content = data.get('contains_synthetic_content', False)
+        made_for_kids = data.get('made_for_kids', False)
         privacy_status = data.get('privacy_status', 'unlisted')
+        fb_enabled = data.get('fb_enabled', False)
+        fb_page_id = data.get('fb_page_id', '')
+        
+        # Upload per day settings
+        videos_per_day = int(data.get('videos_per_day', 1))
+        upload_times_str = data.get('upload_times', '')
         
         if not start_date_str or not token_file:
             return jsonify({'success': False, 'error': 'Tanggal awal dan token harus diisi'}), 400
         
-        try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%dT%H:%M')
-        except:
-            return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
+        # Parse upload times
+        upload_times = []
+        if upload_times_str:
+            for time_str in upload_times_str.split(','):
+                time_str = time_str.strip()
+                if time_str:
+                    try:
+                        time_obj = datetime.strptime(time_str, '%H:%M').time()
+                        upload_times.append(time_obj)
+                    except:
+                        return jsonify({'success': False, 'error': f'Format waktu tidak valid: {time_str}'}), 400
+        
+        # Validate: jumlah waktu harus = videos_per_day
+        if upload_times and len(upload_times) != videos_per_day:
+            return jsonify({'success': False, 'error': f'Jumlah waktu upload ({len(upload_times)}) harus sama dengan videos per day ({videos_per_day})'}), 400
+        
+        # If no upload times specified, use default (start_date time)
+        if not upload_times:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%dT%H:%M')
+                upload_times = [start_date.time()]
+                videos_per_day = 1
+            except:
+                return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
+        else:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            except:
+                return jsonify({'success': False, 'error': 'Format tanggal tidak valid'}), 400
         
         # Get both looped and regular videos for current user
         from modules.database import get_videos
@@ -3741,8 +4834,15 @@ def save_bulk_upload_queue_route():
             
             logging.info(f"[QUEUE] Video found: {video.get('title') or video.get('original_title')}")
             
-            # Calculate publish date (increment by 1 day for each video)
-            publish_date = start_date + timedelta(days=idx)
+            # Calculate publish date based on videos_per_day and upload_times
+            day_offset = idx // videos_per_day
+            time_index = idx % videos_per_day
+            upload_time = upload_times[time_index]
+            
+            publish_date = datetime.combine(
+                start_date.date() + timedelta(days=day_offset),
+                upload_time
+            )
             
             queue_entry = {
                 'id': str(uuid.uuid4()),
@@ -3755,8 +4855,16 @@ def save_bulk_upload_queue_route():
                 'token_file': token_file,
                 'stream_id': stream_id,
                 'thumbnail_id': thumbnail_id,
+                'thumbnail_tag': thumbnail_tag,
+                'video_category': video_category,
+                'playlist_id': playlist_id,
+                'contains_synthetic_content': 1 if contains_synthetic_content else 0,
+                'made_for_kids': 1 if made_for_kids else 0,
                 'privacy_status': privacy_status,
-                'status': 'queued'
+                'status': 'queued',
+                'fb_enabled': 1 if fb_enabled else 0,
+                'fb_page_id': fb_page_id if fb_enabled else None,
+                'fb_status': 'pending' if fb_enabled else None
             }
             
             # Add to database
@@ -3903,19 +5011,26 @@ def start_bulk_upload():
                     scheduled_time_utc = now_utc + timedelta(hours=2)
                     logging.warning(f"Scheduled time adjusted to {scheduled_time_utc} UTC (minimum 1 hour in future)")
                 
+                # Get made_for_kids flag (default False)
+                made_for_kids = bool(item.get('made_for_kids', 0))
+                
                 body = {
                     'snippet': {
                         'title': item['title'],
                         'description': item['description'],
                         'tags': item['tags'] if isinstance(item['tags'], list) else item['tags'].split(','),
-                        'categoryId': '22'  # People & Blogs
+                        'categoryId': item.get('video_category', '22')
                     },
                     'status': {
                         'privacyStatus': 'private',  # MUST be private for scheduled upload
                         'publishAt': scheduled_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ'),  # ISO 8601 UTC format
-                        'selfDeclaredMadeForKids': False
+                        'selfDeclaredMadeForKids': made_for_kids
                     }
                 }
+                
+                # Add contains_synthetic_content flag if set
+                if item.get('contains_synthetic_content', 0):
+                    body['status']['containsSyntheticMedia'] = True
                 
                 logging.info(f"Uploading video: {item['title']}")
                 logging.info(f"Privacy: private (will auto-publish to PUBLIC at scheduled time)")
@@ -3945,7 +5060,9 @@ def start_bulk_upload():
                 item['youtube_video_id'] = video_id
                 
                 # Upload thumbnail if specified
+                thumbnail_uploaded = False
                 if item.get('thumbnail_id'):
+                    # Specific thumbnail
                     thumbnails = get_thumbnail_database()
                     thumbnail = next((t for t in thumbnails if t['id'] == item['thumbnail_id']), None)
                     if thumbnail:
@@ -3955,13 +5072,96 @@ def start_bulk_upload():
                                 videoId=video_id,
                                 media_body=thumbnail_path
                             ).execute()
+                            thumbnail_uploaded = True
+                            logging.info(f"Uploaded specific thumbnail: {thumbnail['filename']}")
+                elif item.get('thumbnail_tag'):
+                    # Random thumbnail by tag
+                    from modules.database import get_random_thumbnail_by_tag
+                    thumbnail = get_random_thumbnail_by_tag(user_id, item['thumbnail_tag'])
+                    if thumbnail:
+                        thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail['filename'])
+                        if os.path.exists(thumbnail_path):
+                            youtube.thumbnails().set(
+                                videoId=video_id,
+                                media_body=thumbnail_path
+                            ).execute()
+                            thumbnail_uploaded = True
+                            logging.info(f"Uploaded random thumbnail by tag '{item['thumbnail_tag']}': {thumbnail['filename']}")
+                
+                # Add video to playlist if specified
+                if item.get('playlist_id'):
+                    try:
+                        youtube.playlistItems().insert(
+                            part='snippet',
+                            body={
+                                'snippet': {
+                                    'playlistId': item['playlist_id'],
+                                    'resourceId': {
+                                        'kind': 'youtube#video',
+                                        'videoId': video_id
+                                    }
+                                }
+                            }
+                        ).execute()
+                        logging.info(f"Added video to playlist: {item['playlist_id']}")
+                    except Exception as e:
+                        logging.error(f"Failed to add video to playlist: {e}")
+                
+                # Upload to Facebook if enabled
+                fb_video_id = None
+                fb_error = None
+                if item.get('fb_enabled') and item.get('fb_page_id'):
+                    try:
+                        from modules.database import get_facebook_page
+                        fb_page = get_facebook_page(user_id, item['fb_page_id'])
+                        if fb_page:
+                            logging.info(f"Uploading to Facebook Page: {fb_page['page_name']}")
+                            fb_result = upload_to_facebook(
+                                page_id=fb_page['page_id'],
+                                access_token=fb_page['access_token'],
+                                video_path=video_path,
+                                title=item['title'],
+                                description=item['description'],
+                                scheduled_time=item['scheduled_publish_time']
+                            )
+                            if fb_result['success']:
+                                fb_video_id = fb_result.get('video_id')
+                                logging.info(f"Facebook upload success: {fb_video_id}")
+                            else:
+                                fb_error = fb_result.get('error', 'Unknown error')
+                                logging.error(f"Facebook upload failed: {fb_error}")
+                        else:
+                            fb_error = 'Facebook page not found'
+                    except Exception as fb_e:
+                        fb_error = str(fb_e)
+                        logging.error(f"Facebook upload error: {fb_e}")
                 
                 # Update status to completed
-                update_bulk_upload_item(item['id'], user_id, {
+                update_data = {
                     'status': 'completed',
                     'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'youtube_video_id': video_id
-                })
+                }
+                if item.get('fb_enabled'):
+                    update_data['fb_status'] = 'completed' if fb_video_id else 'failed'
+                    update_data['fb_video_id'] = fb_video_id
+                    update_data['fb_error_message'] = fb_error
+                
+                update_bulk_upload_item(item['id'], user_id, update_data)
+                
+                # Auto delete video file if enabled
+                auto_config = get_auto_upload_config(user_id=user_id)
+                if auto_config.get('auto_delete_after_upload') and os.path.exists(video_path):
+                    try:
+                        os.remove(video_path)
+                        logging.info(f"[AUTO-DELETE] Deleted video file: {video_path}")
+                        # Also delete from video gallery database
+                        from modules.database import delete_video
+                        if item.get('video_id'):
+                            delete_video(item['video_id'], user_id)
+                            logging.info(f"[AUTO-DELETE] Removed from video gallery: {item['video_id']}")
+                    except Exception as del_e:
+                        logging.error(f"[AUTO-DELETE] Failed to delete video file: {del_e}")
                 
                 # Send Telegram notification (success)
                 try:
@@ -4111,6 +5311,115 @@ def clear_completed_queue():
     flash(f'{deleted_count} item berhasil dihapus', 'success')
     return redirect(url_for('bulk_upload_queue_page'))
 
+@app.route('/delete-uploaded-local/<item_id>', methods=['POST'])
+@login_required
+@demo_readonly
+def delete_uploaded_local(item_id):
+    """Delete local video file and gallery entry for a completed upload queue item - PER USER"""
+    from modules.database import get_bulk_upload_queue, delete_video_from_db
+    
+    user_id = int(current_user.id)
+    queue = get_bulk_upload_queue(user_id)
+    
+    queue_item = None
+    for item in queue:
+        if item['id'] == item_id:
+            queue_item = item
+            break
+    
+    if not queue_item:
+        flash('Item queue tidak ditemukan', 'error')
+        return redirect(url_for('bulk_upload_queue_page'))
+    
+    if queue_item.get('status') != 'completed':
+        flash('Hanya video dengan status completed yang bisa dihapus dari gallery', 'error')
+        return redirect(url_for('bulk_upload_queue_page'))
+    
+    video_id = queue_item.get('video_id')
+    if not video_id:
+        flash('Video ID tidak ditemukan pada item queue', 'error')
+        return redirect(url_for('bulk_upload_queue_page'))
+    
+    videos = get_video_database()
+    video_to_delete = None
+    for video in videos:
+        if video['id'] == video_id:
+            video_to_delete = video
+            break
+    
+    if not video_to_delete:
+        flash('Video tidak ditemukan di gallery (mungkin sudah dihapus sebelumnya)', 'warning')
+        return redirect(url_for('bulk_upload_queue_page'))
+    
+    # Delete main video file
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], video_to_delete['filename'])
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    
+    # Delete thumbnail if exists
+    if video_to_delete.get('thumbnail'):
+        thumbnail_path = os.path.join(THUMBNAIL_FOLDER, video_to_delete['thumbnail'])
+        if os.path.exists(thumbnail_path):
+            os.remove(thumbnail_path)
+    
+    # Remove from videos table
+    delete_video_from_db(video_id)
+    
+    flash('Video lokal dan data gallery berhasil dihapus', 'success')
+    return redirect(url_for('bulk_upload_queue_page'))
+
+@app.route('/delete-uploaded-local-all', methods=['POST'])
+@login_required
+@demo_readonly
+def delete_all_uploaded_local():
+    """Delete local video files and gallery entries for all completed uploads - PER USER"""
+    from modules.database import get_bulk_upload_queue, delete_video_from_db
+    
+    user_id = int(current_user.id)
+    queue = get_bulk_upload_queue(user_id)
+    completed_items = [item for item in queue if item.get('status') == 'completed']
+    
+    if not completed_items:
+        flash('Tidak ada video dengan status completed di queue', 'warning')
+        return redirect(url_for('bulk_upload_queue_page'))
+    
+    # Collect unique video IDs from completed items
+    video_ids = set()
+    for item in completed_items:
+        if item.get('video_id'):
+            video_ids.add(item['video_id'])
+    
+    if not video_ids:
+        flash('Tidak ada video gallery yang terkait dengan item completed', 'warning')
+        return redirect(url_for('bulk_upload_queue_page'))
+    
+    videos = get_video_database()
+    success_count = 0
+    
+    for video in videos:
+        if video['id'] in video_ids:
+            try:
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], video['filename'])
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                
+                if video.get('thumbnail'):
+                    thumbnail_path = os.path.join(THUMBNAIL_FOLDER, video['thumbnail'])
+                    if os.path.exists(thumbnail_path):
+                        os.remove(thumbnail_path)
+                
+                delete_video_from_db(video['id'])
+                success_count += 1
+            except Exception as e:
+                logging.error(f"Error deleting local video {video['id']}: {e}")
+    
+    if success_count > 0:
+        flash(f'{success_count} video lokal berhasil dihapus bersama datanya di gallery', 'success')
+    else:
+        flash('Tidak ada video gallery yang berhasil dihapus', 'warning')
+    
+    return redirect(url_for('bulk_upload_queue_page'))
+
 @app.route('/requeue-items', methods=['POST'])
 @login_required
 @demo_readonly
@@ -4188,6 +5497,8 @@ def toggle_auto_upload():
             config['upload_offset_hours'] = int(data['upload_offset_hours'])
         if 'check_interval_minutes' in data:
             config['check_interval_minutes'] = int(data['check_interval_minutes'])
+        if 'auto_delete_after_upload' in data:
+            config['auto_delete_after_upload'] = bool(data['auto_delete_after_upload'])
         
         save_auto_upload_config(config, user_id=user_id)
         
@@ -4304,19 +5615,26 @@ def auto_upload_scheduler():
                             if scheduled_time_utc <= now_utc + timedelta(hours=1):
                                 scheduled_time_utc = now_utc + timedelta(hours=2)
                             
+                            # Get made_for_kids flag (default False)
+                            made_for_kids = bool(item.get('made_for_kids', 0))
+                            
                             body = {
                                 'snippet': {
                                     'title': item['title'],
                                     'description': item['description'],
                                     'tags': item['tags'] if isinstance(item['tags'], list) else item['tags'].split(','),
-                                    'categoryId': '22'
+                                    'categoryId': item.get('video_category', '22')
                                 },
                                 'status': {
                                     'privacyStatus': 'private',
                                     'publishAt': scheduled_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                                    'selfDeclaredMadeForKids': False
+                                    'selfDeclaredMadeForKids': made_for_kids
                                 }
                             }
+                            
+                            # Add contains_synthetic_content flag if set
+                            if item.get('contains_synthetic_content', 0):
+                                body['status']['containsSyntheticMedia'] = True
                             
                             if item.get('stream_id'):
                                 body['status']['streamId'] = item['stream_id']
@@ -4339,7 +5657,9 @@ def auto_upload_scheduler():
                             video_id = response['id']
                         
                             # Upload thumbnail if specified
+                            thumbnail_uploaded = False
                             if item.get('thumbnail_id'):
+                                # Specific thumbnail
                                 from modules.database import get_thumbnails
                                 thumbnails = get_thumbnails(user_id)
                                 thumbnail = next((t for t in thumbnails if t['id'] == item['thumbnail_id']), None)
@@ -4350,18 +5670,100 @@ def auto_upload_scheduler():
                                             videoId=video_id,
                                             media_body=thumbnail_path
                                         ).execute()
+                                        thumbnail_uploaded = True
+                                        logging.info(f"[AUTO-UPLOAD][{username}] Uploaded specific thumbnail: {thumbnail['filename']}")
+                            elif item.get('thumbnail_tag'):
+                                # Random thumbnail by tag
+                                from modules.database import get_random_thumbnail_by_tag
+                                thumbnail = get_random_thumbnail_by_tag(user_id, item['thumbnail_tag'])
+                                if thumbnail:
+                                    thumbnail_path = os.path.join(THUMBNAIL_FOLDER, thumbnail['filename'])
+                                    if os.path.exists(thumbnail_path):
+                                        youtube.thumbnails().set(
+                                            videoId=video_id,
+                                            media_body=thumbnail_path
+                                        ).execute()
+                                        thumbnail_uploaded = True
+                                        logging.info(f"[AUTO-UPLOAD][{username}] Uploaded random thumbnail by tag '{item['thumbnail_tag']}': {thumbnail['filename']}")
+                            
+                            # Add video to playlist if specified
+                            if item.get('playlist_id'):
+                                try:
+                                    youtube.playlistItems().insert(
+                                        part='snippet',
+                                        body={
+                                            'snippet': {
+                                                'playlistId': item['playlist_id'],
+                                                'resourceId': {
+                                                    'kind': 'youtube#video',
+                                                    'videoId': video_id
+                                                }
+                                            }
+                                        }
+                                    ).execute()
+                                    logging.info(f"[AUTO-UPLOAD][{username}] Added video to playlist: {item['playlist_id']}")
+                                except Exception as e:
+                                    logging.error(f"[AUTO-UPLOAD][{username}] Failed to add video to playlist: {e}")
+                            
+                            # Upload to Facebook if enabled
+                            fb_video_id = None
+                            fb_error = None
+                            if item.get('fb_enabled') and item.get('fb_page_id'):
+                                try:
+                                    from modules.database import get_facebook_page
+                                    fb_page = get_facebook_page(user_id, item['fb_page_id'])
+                                    if fb_page:
+                                        logging.info(f"[AUTO-UPLOAD][{username}] Uploading to Facebook Page: {fb_page['page_name']}")
+                                        fb_result = upload_to_facebook(
+                                            page_id=fb_page['page_id'],
+                                            access_token=fb_page['access_token'],
+                                            video_path=item['video_path'],
+                                            title=item['title'],
+                                            description=item['description'],
+                                            scheduled_time=item['scheduled_publish_time']
+                                        )
+                                        if fb_result['success']:
+                                            fb_video_id = fb_result.get('video_id')
+                                            logging.info(f"[AUTO-UPLOAD][{username}] Facebook upload success: {fb_video_id}")
+                                        else:
+                                            fb_error = fb_result.get('error', 'Unknown error')
+                                            logging.error(f"[AUTO-UPLOAD][{username}] Facebook upload failed: {fb_error}")
+                                    else:
+                                        fb_error = 'Facebook page not found'
+                                except Exception as fb_e:
+                                    fb_error = str(fb_e)
+                                    logging.error(f"[AUTO-UPLOAD][{username}] Facebook upload error: {fb_e}")
                             
                             # Mark as completed
                             video_url = f'https://studio.youtube.com/video/{video_id}/edit'
-                            update_bulk_upload_item(item['id'], user_id, {
+                            update_data = {
                                 'status': 'completed',
                                 'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                 'youtube_video_id': video_id
-                            })
+                            }
+                            if item.get('fb_enabled'):
+                                update_data['fb_status'] = 'completed' if fb_video_id else 'failed'
+                                update_data['fb_video_id'] = fb_video_id
+                                update_data['fb_error_message'] = fb_error
+                            
+                            update_bulk_upload_item(item['id'], user_id, update_data)
                             
                             logging.info(f"[AUTO-UPLOAD][{username}] ✓ Successfully uploaded: {item['title']}")
                             logging.info(f"[AUTO-UPLOAD][{username}] YouTube Video ID: {video_id}")
                             uploads_processed += 1
+                            
+                            # Auto delete video file if enabled
+                            if config.get('auto_delete_after_upload') and os.path.exists(item['video_path']):
+                                try:
+                                    os.remove(item['video_path'])
+                                    logging.info(f"[AUTO-UPLOAD][{username}] [AUTO-DELETE] Deleted video file: {item['video_path']}")
+                                    # Also delete from video gallery database
+                                    from modules.database import delete_video
+                                    if item.get('video_id'):
+                                        delete_video(item['video_id'], user_id)
+                                        logging.info(f"[AUTO-UPLOAD][{username}] [AUTO-DELETE] Removed from video gallery")
+                                except Exception as del_e:
+                                    logging.error(f"[AUTO-UPLOAD][{username}] [AUTO-DELETE] Failed to delete: {del_e}")
 
                             # Send Telegram notification (success)
                             try:

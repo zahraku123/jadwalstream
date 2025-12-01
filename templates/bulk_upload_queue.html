@@ -147,7 +147,7 @@
         </div>
 
         <!-- Settings (show when enabled) -->
-        <div x-show="enabled" x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-dark-card/50 rounded-lg border border-dark-border">
+        <div x-show="enabled" x-transition class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 p-4 bg-dark-card/50 rounded-lg border border-dark-border">
             <div>
                 <label class="block text-sm font-medium text-slate-300 mb-2">
                     <i class="fas fa-clock mr-1 text-yellow-400"></i>
@@ -174,6 +174,23 @@
                        max="60"
                        class="w-full px-4 py-2 bg-dark-card border border-dark-border rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500">
                 <p class="text-xs text-slate-400 mt-1">How often to check for videos ready to upload</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">
+                    <i class="fas fa-trash-alt mr-1 text-red-400"></i>
+                    Auto Delete After Upload
+                </label>
+                <div class="flex items-center mt-3">
+                    <button @click="autoDeleteAfterUpload = !autoDeleteAfterUpload; saveSettings()" 
+                            class="relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                            :class="autoDeleteAfterUpload ? 'bg-red-600' : 'bg-gray-600'">
+                        <span class="pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                              :class="autoDeleteAfterUpload ? 'translate-x-6' : 'translate-x-0'"></span>
+                    </button>
+                    <span class="ml-3 text-sm" :class="autoDeleteAfterUpload ? 'text-red-400' : 'text-slate-400'" x-text="autoDeleteAfterUpload ? 'ON' : 'OFF'"></span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">Delete video file after successful upload</p>
             </div>
         </div>
 
@@ -263,7 +280,7 @@
                 </span>
             </h2>
 
-            <div class="flex gap-2">
+            <div class="flex gap-4 items-center">
                 <!-- Queue Again Button -->
                 <button @click="requeueSelected()" 
                         x-show="selectedItems.length > 0"
@@ -272,16 +289,28 @@
                     Queue Again
                 </button>
 
-                {% if queue|selectattr('status', 'equalto', 'completed')|list|length > 0 %}
-                <form method="POST" action="{{ url_for('clear_completed_queue') }}" class="inline">
-                    <button type="submit" 
-                            onclick="return confirm('Clear all completed items from queue?')"
-                            class="text-sm text-red-400 hover:text-red-300 transition-colors">
-                        <i class="fas fa-trash mr-1"></i>
-                        Clear Completed
-                    </button>
-                </form>
-                {% endif %}
+                <div class="flex gap-3 items-center">
+                    {% if queue|selectattr('status', 'equalto', 'completed')|list|length > 0 %}
+                    <!-- Delete local files for all completed items -->
+                    <form method="POST" action="{{ url_for('delete_all_uploaded_local') }}" class="inline">
+                        <button type="submit" 
+                                onclick="return confirm('Hapus SEMUA file video lokal yang sudah sukses upload dan menghapusnya dari Video Gallery? Video di YouTube tetap ADA.')"
+                                class="inline-flex items-center text-sm text-yellow-400 hover:text-yellow-300 transition-colors">
+                            <i class="fas fa-trash-restore mr-1"></i>
+                            Hapus Semua Video Lokal (Completed)
+                        </button>
+                    </form>
+
+                    <form method="POST" action="{{ url_for('clear_completed_queue') }}" class="inline">
+                        <button type="submit" 
+                                onclick="return confirm('Clear all completed items from queue? (tidak menghapus file video lokal)')"
+                                class="text-sm text-red-400 hover:text-red-300 transition-colors">
+                            <i class="fas fa-ban mr-1"></i>
+                            Clear Completed
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
         </div>
 
@@ -293,7 +322,7 @@
                     <div class="flex items-start gap-3">
                         <!-- Video Preview -->
                         <div class="flex-shrink-0 w-48">
-                            <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                            <video width="100%" preload="none" class="w-full aspect-video bg-slate-900">
                                 {% if item.video_path %}
                                     {% if 'done/' in item.video_path %}
                                         {# Looped video #}
@@ -358,10 +387,32 @@
                                 </div>
                                 {% if item.get('youtube_video_id') %}
                                 <div>
-                                    <i class="fas fa-link mr-1 text-blue-400"></i>
-                                    <a href="{{ item.video_url }}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">
+                                    <i class="fab fa-youtube mr-1 text-red-400"></i>
+                                    <a href="https://studio.youtube.com/video/{{ item.youtube_video_id }}/edit" target="_blank" class="text-blue-400 hover:text-blue-300 underline">
                                         View on YouTube
                                     </a>
+                                </div>
+                                {% endif %}
+                                {% if item.get('fb_enabled') %}
+                                <div class="flex items-center">
+                                    <i class="fab fa-facebook mr-1 text-blue-500"></i>
+                                    <span class="mr-2">Facebook:</span>
+                                    {% if item.fb_status == 'completed' %}
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-green-500/20 text-green-400">
+                                        <i class="fas fa-check mr-1"></i>Uploaded
+                                    </span>
+                                    {% if item.get('fb_video_id') %}
+                                    <a href="https://www.facebook.com/{{ item.fb_video_id }}" target="_blank" class="ml-2 text-blue-400 hover:text-blue-300 underline text-xs">View</a>
+                                    {% endif %}
+                                    {% elif item.fb_status == 'failed' %}
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400" title="{{ item.fb_error_message or 'Upload failed' }}">
+                                        <i class="fas fa-times mr-1"></i>Failed
+                                    </span>
+                                    {% elif item.fb_status == 'pending' %}
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-slate-500/20 text-slate-400">
+                                        <i class="fas fa-clock mr-1"></i>Pending
+                                    </span>
+                                    {% endif %}
                                 </div>
                                 {% endif %}
                             </div>
@@ -414,6 +465,13 @@
                                 </button>
                             </form>
                             {% endif %}
+                            {% if item.status == 'completed' %}
+                            <form method="POST" action="{{ url_for('delete_uploaded_local', item_id=item.id) }}" onsubmit="return confirm('Hapus file video lokal dan data Video Gallery untuk upload ini? Video di YouTube tetap ADA.')">
+                                <button type="submit" class="text-yellow-400 hover:text-yellow-300 transition-colors p-2" title="Hapus video lokal & gallery">
+                                    <i class="fas fa-trash-restore"></i>
+                                </button>
+                            </form>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -440,6 +498,7 @@ function autoScheduler() {
         enabled: {{ 'true' if auto_config.get('enabled') else 'false' }},
         uploadOffsetHours: {{ auto_config.get('upload_offset_hours', 2) }},
         checkIntervalMinutes: {{ auto_config.get('check_interval_minutes', 5) }},
+        autoDeleteAfterUpload: {{ 'true' if auto_config.get('auto_delete_after_upload') else 'false' }},
         toggleChanged: false,
         
         async toggleScheduler() {
@@ -458,7 +517,8 @@ function autoScheduler() {
                     body: JSON.stringify({
                         enabled: this.enabled,
                         upload_offset_hours: this.uploadOffsetHours,
-                        check_interval_minutes: this.checkIntervalMinutes
+                        check_interval_minutes: this.checkIntervalMinutes,
+                        auto_delete_after_upload: this.autoDeleteAfterUpload
                     })
                 });
                 
@@ -614,11 +674,11 @@ function updateQueue(queue) {
         }
 
         let youtubeLink = '';
-        if (item.youtube_video_id && item.video_url) {
+        if (item.youtube_video_id) {
             youtubeLink = `
                 <div>
                     <i class="fas fa-link mr-1 text-blue-400"></i>
-                    <a href="${item.video_url}" target="_blank" class="text-blue-400 hover:text-blue-300 underline">
+                    <a href="https://studio.youtube.com/video/${item.youtube_video_id}/edit" target="_blank" class="text-blue-400 hover:text-blue-300 underline">
                         View on YouTube
                     </a>
                 </div>
@@ -635,12 +695,23 @@ function updateQueue(queue) {
             `;
         }
 
-        let deleteButton = '';
+        let queueDeleteButton = '';
         if (item.status === 'queued' || item.status === 'failed') {
-            deleteButton = `
+            queueDeleteButton = `
                 <form method="POST" action="/delete-queue-item/${item.id}" onsubmit="return confirm('Delete this item from queue?')">
                     <button type="submit" class="text-red-400 hover:text-red-300 transition-colors p-2">
                         <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            `;
+        }
+
+        let localDeleteButton = '';
+        if (item.status === 'completed') {
+            localDeleteButton = `
+                <form method="POST" action="/delete-uploaded-local/${item.id}" onsubmit="return confirm('Hapus file video lokal dan data Video Gallery untuk upload ini? Video di YouTube tetap ADA.')">
+                    <button type="submit" class="text-yellow-400 hover:text-yellow-300 transition-colors p-2" title="Hapus video lokal & gallery">
+                        <i class="fas fa-trash-restore"></i>
                     </button>
                 </form>
             `;
@@ -672,7 +743,8 @@ function updateQueue(queue) {
                         ${errorMessage}
                     </div>
                     <div class="ml-4 flex space-x-2">
-                        ${deleteButton}
+                        ${queueDeleteButton}
+                        ${localDeleteButton}
                     </div>
                 </div>
             </div>

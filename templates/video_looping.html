@@ -49,7 +49,7 @@
                 <div class="glass-panel rounded-lg overflow-hidden border border-dark-border hover:border-pink-500/50 transition-all">
                     <!-- Video Preview -->
                     <div class="relative">
-                        <video width="100%" preload="metadata" class="w-full aspect-video bg-slate-900">
+                        <video width="100%" preload="none" {% if video.thumbnail %}poster="{{ url_for('serve_thumbnail', filename=video.thumbnail) }}"{% endif %} class="w-full aspect-video bg-slate-900">
                             <source src="{{ url_for('serve_video', filename=video.filename) }}#t=0.5">
                             Your browser does not support the video tag.
                         </video>
@@ -194,7 +194,7 @@
                             </div>
                             
                             <!-- Video Preview -->
-                            <video width="100%" controls preload="metadata" class="w-full aspect-video bg-slate-900 rounded-t-lg">
+                            <video width="100%" controls preload="none" class="w-full aspect-video bg-slate-900 rounded-t-lg">
                                 <source src="{{ url_for('serve_looped_video', filename=looped.output_filename) }}">
                                 Your browser does not support the video tag.
                             </video>

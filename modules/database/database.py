@@ -38,7 +38,7 @@ def init_database():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'demo',
+                role TEXT NOT NULL DEFAULT 'user',
                 status TEXT NOT NULL DEFAULT 'approved',
                 expiry_days INTEGER,
                 expiry_date TIMESTAMP,
@@ -49,9 +49,19 @@ def init_database():
                 max_streams INTEGER,
                 max_storage_mb INTEGER,
                 scheduler_times TEXT,
+                telegram_bot_token TEXT,
+                telegram_chat_id TEXT,
+                telegram_enabled INTEGER DEFAULT 0,
+                gemini_api_key TEXT,
+                gemini_model TEXT,
+                gemini_custom_prompt TEXT,
+                client_secret_path TEXT,
                 auto_upload_enabled INTEGER DEFAULT 0,
                 auto_upload_offset_hours INTEGER DEFAULT 2,
                 auto_upload_check_interval INTEGER DEFAULT 30,
+                auto_delete_after_upload INTEGER DEFAULT 0,
+                fb_app_id TEXT,
+                fb_app_secret TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -81,6 +91,7 @@ def init_database():
                 title TEXT NOT NULL,
                 filename TEXT NOT NULL,
                 original_filename TEXT,
+                tags TEXT,
                 date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
@@ -132,6 +143,9 @@ def init_database():
                 auto_start INTEGER DEFAULT 0,
                 auto_stop INTEGER DEFAULT 0,
                 made_for_kids INTEGER DEFAULT 0,
+                playlist_id TEXT,
+                use_random_metadata INTEGER DEFAULT 0,
+                metadata_excel_file TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
@@ -173,12 +187,22 @@ def init_database():
                 token_file TEXT,
                 stream_id TEXT,
                 thumbnail_id TEXT,
+                thumbnail_tag TEXT,
+                video_category TEXT DEFAULT '22',
+                playlist_id TEXT,
+                contains_synthetic_content INTEGER DEFAULT 0,
+                made_for_kids INTEGER DEFAULT 0,
                 privacy_status TEXT DEFAULT 'private',
                 status TEXT DEFAULT 'queued',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 uploaded_at TIMESTAMP,
                 youtube_video_id TEXT,
                 error_message TEXT,
+                fb_enabled INTEGER DEFAULT 0,
+                fb_page_id TEXT,
+                fb_status TEXT DEFAULT 'pending',
+                fb_video_id TEXT,
+                fb_error_message TEXT,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         ''')
@@ -214,6 +238,54 @@ def init_database():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_stream_timers_user_id ON stream_timers(user_id)')
         
+        # Playlist Cache table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS playlist_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token_file TEXT NOT NULL,
+                playlist_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                playlist_description TEXT,
+                video_count INTEGER DEFAULT 0,
+                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, token_file, playlist_id)
+            )
+        ''')
+        
+        # Custom Prompts table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS custom_prompts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                prompt_text TEXT NOT NULL,
+                is_default INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Facebook Pages table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS facebook_pages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                page_id TEXT NOT NULL,
+                page_name TEXT NOT NULL,
+                access_token TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, page_id)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_facebook_pages_user_id ON facebook_pages(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_playlist_cache_user_id ON playlist_cache(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_custom_prompts_user_id ON custom_prompts(user_id)')
+        
         conn.commit()
         
         # Run migrations for existing databases
@@ -234,9 +306,19 @@ def migrate_database():
             'max_streams': 'INTEGER',
             'max_storage_mb': 'INTEGER',
             'scheduler_times': 'TEXT',
+            'telegram_bot_token': 'TEXT',
+            'telegram_chat_id': 'TEXT',
+            'telegram_enabled': 'INTEGER DEFAULT 0',
+            'gemini_api_key': 'TEXT',
+            'gemini_model': 'TEXT',
+            'gemini_custom_prompt': 'TEXT',
+            'client_secret_path': 'TEXT',
             'auto_upload_enabled': 'INTEGER DEFAULT 0',
             'auto_upload_offset_hours': 'INTEGER DEFAULT 2',
-            'auto_upload_check_interval': 'INTEGER DEFAULT 30'
+            'auto_upload_check_interval': 'INTEGER DEFAULT 30',
+            'auto_delete_after_upload': 'INTEGER DEFAULT 0',
+            'fb_app_id': 'TEXT',
+            'fb_app_secret': 'TEXT'
         }
         
         # Add missing columns to users table
@@ -268,10 +350,154 @@ def migrate_database():
                 except Exception as e:
                     print(f"⚠️  Could not add column '{column_name}': {e}")
         
+        # Migrate thumbnails table
+        cursor.execute('PRAGMA table_info(thumbnails)')
+        existing_thumbnails_columns = {row['name'] for row in cursor.fetchall()}
+        
+        thumbnails_columns_to_add = {
+            'tags': 'TEXT'
+        }
+        
+        for column_name, column_def in thumbnails_columns_to_add.items():
+            if column_name not in existing_thumbnails_columns:
+                try:
+                    cursor.execute(f'ALTER TABLE thumbnails ADD COLUMN {column_name} {column_def}')
+                    print(f"✅ Added column '{column_name}' to thumbnails table")
+                except Exception as e:
+                    print(f"⚠️  Could not add column '{column_name}': {e}")
+        
+        # Migrate bulk_upload_queue table
+        cursor.execute('PRAGMA table_info(bulk_upload_queue)')
+        existing_bulk_columns = {row['name'] for row in cursor.fetchall()}
+        
+        bulk_columns_to_add = {
+            'thumbnail_tag': 'TEXT',
+            'playlist_id': 'TEXT',
+            'contains_synthetic_content': 'INTEGER DEFAULT 0',
+            'made_for_kids': 'INTEGER DEFAULT 0',
+            'fb_enabled': 'INTEGER DEFAULT 0',
+            'fb_page_id': 'TEXT',
+            'fb_status': "TEXT DEFAULT 'pending'",
+            'fb_video_id': 'TEXT',
+            'fb_error_message': 'TEXT'
+        }
+        
+        for column_name, column_def in bulk_columns_to_add.items():
+            if column_name not in existing_bulk_columns:
+                try:
+                    cursor.execute(f'ALTER TABLE bulk_upload_queue ADD COLUMN {column_name} {column_def}')
+                    print(f"✅ Added column '{column_name}' to bulk_upload_queue table")
+                except Exception as e:
+                    print(f"⚠️  Could not add column '{column_name}': {e}")
+        
+        # Migrate schedules table - add playlist_id column
+        cursor.execute('PRAGMA table_info(schedules)')
+        existing_schedules_columns = {row['name'] for row in cursor.fetchall()}
+        
+        if 'playlist_id' not in existing_schedules_columns:
+            try:
+                cursor.execute('ALTER TABLE schedules ADD COLUMN playlist_id TEXT')
+                print("✅ Added column 'playlist_id' to schedules table")
+            except Exception as e:
+                print(f"⚠️  Could not add column 'playlist_id': {e}")
+        
+        # Add use_random_metadata and metadata_excel_file columns to schedules table
+        additional_schedule_columns = {
+            'use_random_metadata': 'INTEGER DEFAULT 0',
+            'metadata_excel_file': 'TEXT'
+        }
+        
+        for column_name, column_def in additional_schedule_columns.items():
+            if column_name not in existing_schedules_columns:
+                try:
+                    cursor.execute(f'ALTER TABLE schedules ADD COLUMN {column_name} {column_def}')
+                    print(f"✅ Added column '{column_name}' to schedules table")
+                except Exception as e:
+                    print(f"⚠️  Could not add column '{column_name}': {e}")
+        
+        # Add random_metadata_cache table for storing generated metadata
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS random_metadata_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                titles TEXT NOT NULL,  -- JSON array
+                descriptions TEXT NOT NULL,  -- JSON array  
+                tags TEXT NOT NULL,  -- JSON array
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, category)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_random_metadata_user_id ON random_metadata_cache(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_random_metadata_category ON random_metadata_cache(category)')
+        
         # Fix existing admin users: set is_admin=1 for users with role='admin'
         cursor.execute("UPDATE users SET is_admin = 1 WHERE role = 'admin' AND (is_admin IS NULL OR is_admin = 0)")
         if cursor.rowcount > 0:
             print(f"✅ Updated {cursor.rowcount} admin user(s) with is_admin flag")
+
+        # Migrate playlist_cache table
+        cursor.execute('PRAGMA table_info(playlist_cache)')
+        existing_playlist_columns = {row['name'] for row in cursor.fetchall()}
+        
+        # Add synced_at column if missing
+        if 'synced_at' not in existing_playlist_columns:
+            try:
+                cursor.execute('ALTER TABLE playlist_cache ADD COLUMN synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                print("✅ Added column 'synced_at' to playlist_cache table")
+            except Exception as e:
+                print(f"⚠️  Could not add column 'synced_at': {e}")
+        
+        # Rename playlist_title to title if needed (SQLite doesn't support RENAME COLUMN in old versions)
+        if 'playlist_title' in existing_playlist_columns and 'title' not in existing_playlist_columns:
+            try:
+                # Create new table with correct schema
+                cursor.execute('''
+                    CREATE TABLE playlist_cache_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        token_file TEXT NOT NULL,
+                        playlist_id TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        playlist_description TEXT,
+                        video_count INTEGER DEFAULT 0,
+                        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                        UNIQUE(user_id, token_file, playlist_id)
+                    )
+                ''')
+                
+                # Copy data from old table to new table
+                cursor.execute('''
+                    INSERT INTO playlist_cache_new 
+                    (id, user_id, token_file, playlist_id, title, playlist_description, video_count, synced_at)
+                    SELECT id, user_id, token_file, playlist_id, playlist_title, playlist_description, video_count, 
+                           COALESCE(synced_at, CURRENT_TIMESTAMP)
+                    FROM playlist_cache
+                ''')
+                
+                # Drop old table
+                cursor.execute('DROP TABLE playlist_cache')
+                
+                # Rename new table to original name
+                cursor.execute('ALTER TABLE playlist_cache_new RENAME TO playlist_cache')
+                
+                # Recreate index
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_playlist_cache_user_id ON playlist_cache(user_id)')
+                
+                print("✅ Migrated playlist_cache table: renamed 'playlist_title' to 'title'")
+            except Exception as e:
+                print(f"⚠️  Could not migrate playlist_cache table: {e}")
+        
+        # Add title column if both are missing (shouldn't happen, but just in case)
+        elif 'title' not in existing_playlist_columns and 'playlist_title' not in existing_playlist_columns:
+            try:
+                cursor.execute('ALTER TABLE playlist_cache ADD COLUMN title TEXT NOT NULL DEFAULT ""')
+                print("✅ Added column 'title' to playlist_cache table")
+            except Exception as e:
+                print(f"⚠️  Could not add column 'title': {e}")
         
         conn.commit()
 
@@ -293,7 +519,7 @@ def get_user_by_id(user_id: int) -> Optional[Dict]:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def create_user(username: str, password_hash: str, role: str = 'demo', status: str = 'approved', expiry_days: int = None, whatsapp: str = None) -> int:
+def create_user(username: str, password_hash: str, role: str = 'user', status: str = 'approved', expiry_days: int = None, whatsapp: str = None) -> int:
     """Create new user and return user ID"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -486,6 +712,55 @@ def delete_thumbnail(thumbnail_id: str, user_id: int) -> bool:
         cursor.execute('DELETE FROM thumbnails WHERE id = ? AND user_id = ?', (thumbnail_id, user_id))
         return cursor.rowcount > 0
 
+def update_thumbnail_tags(thumbnail_id: str, user_id: int, tags: List[str]) -> bool:
+    """Update thumbnail tags"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        tags_json = json.dumps(tags) if tags else None
+        cursor.execute('''
+            UPDATE thumbnails 
+            SET tags = ?
+            WHERE id = ? AND user_id = ?
+        ''', (tags_json, thumbnail_id, user_id))
+        return cursor.rowcount > 0
+
+def get_thumbnails_by_tag(user_id: int, tag: str) -> List[Dict]:
+    """Get all thumbnails with specific tag"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM thumbnails WHERE user_id = ?', (user_id,))
+        thumbnails = []
+        for row in cursor.fetchall():
+            thumbnail = dict(row)
+            if thumbnail.get('tags'):
+                try:
+                    tags_list = json.loads(thumbnail['tags'])
+                    if tag in tags_list:
+                        thumbnails.append(thumbnail)
+                except:
+                    pass
+        return thumbnails
+
+def get_random_thumbnail_by_tag(user_id: int, tag: str) -> Optional[Dict]:
+    """Get random thumbnail with specific tag"""
+    import random
+    thumbnails = get_thumbnails_by_tag(user_id, tag)
+    return random.choice(thumbnails) if thumbnails else None
+
+def get_all_thumbnail_tags(user_id: int) -> List[str]:
+    """Get all unique tags from user's thumbnails"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT tags FROM thumbnails WHERE user_id = ? AND tags IS NOT NULL', (user_id,))
+        all_tags = set()
+        for row in cursor.fetchall():
+            try:
+                tags_list = json.loads(row['tags'])
+                all_tags.update(tags_list)
+            except:
+                pass
+        return sorted(list(all_tags))
+
 # ============= LIVE STREAM FUNCTIONS =============
 
 def get_live_streams(user_id: int) -> List[Dict]:
@@ -587,8 +862,9 @@ def add_schedule(user_id: int, schedule_data: Dict) -> int:
             INSERT INTO schedules (
                 user_id, title, description, scheduled_start_time, video_file,
                 thumbnail, stream_name, stream_id, token_file, repeat_daily, 
-                privacy_status, auto_start, auto_stop, made_for_kids, success, broadcast_link
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                privacy_status, auto_start, auto_stop, made_for_kids, success, 
+                broadcast_link, playlist_id, use_random_metadata, metadata_excel_file
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             user_id,
             schedule_data['title'],
@@ -605,7 +881,10 @@ def add_schedule(user_id: int, schedule_data: Dict) -> int:
             schedule_data.get('auto_stop', 0),
             schedule_data.get('made_for_kids', 0),
             schedule_data.get('success', 0),
-            schedule_data.get('broadcast_link', '')
+            schedule_data.get('broadcast_link', ''),
+            schedule_data.get('playlist_id', ''),
+            schedule_data.get('use_random_metadata', 0),
+            schedule_data.get('metadata_excel_file', '')
         ))
         return cursor.lastrowid
 
@@ -757,9 +1036,10 @@ def add_bulk_upload_item(user_id: int, upload_data: Dict) -> str:
         cursor.execute('''
             INSERT INTO bulk_upload_queue (
                 id, user_id, video_id, video_path, title, description, tags,
-                scheduled_publish_time, token_file, stream_id, thumbnail_id,
-                privacy_status, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                scheduled_publish_time, token_file, stream_id, thumbnail_id, thumbnail_tag,
+                video_category, playlist_id, contains_synthetic_content, made_for_kids,
+                privacy_status, status, fb_enabled, fb_page_id, fb_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             upload_data['id'],
             user_id,
@@ -772,8 +1052,16 @@ def add_bulk_upload_item(user_id: int, upload_data: Dict) -> str:
             upload_data.get('token_file', ''),
             upload_data.get('stream_id', ''),
             upload_data.get('thumbnail_id', ''),
+            upload_data.get('thumbnail_tag', ''),
+            upload_data.get('video_category', '22'),
+            upload_data.get('playlist_id', ''),
+            upload_data.get('contains_synthetic_content', 0),
+            upload_data.get('made_for_kids', 0),
             upload_data.get('privacy_status', 'private'),
-            upload_data.get('status', 'queued')
+            upload_data.get('status', 'queued'),
+            upload_data.get('fb_enabled', 0),
+            upload_data.get('fb_page_id'),
+            upload_data.get('fb_status')
         ))
         return upload_data['id']
 
@@ -802,6 +1090,52 @@ def delete_bulk_upload_item(upload_id: str, user_id: int) -> bool:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('DELETE FROM bulk_upload_queue WHERE id = ? AND user_id = ?', (upload_id, user_id))
+        return cursor.rowcount > 0
+
+# ============= FACEBOOK PAGES FUNCTIONS =============
+
+def get_facebook_pages(user_id: int) -> List[Dict]:
+    """Get all Facebook pages for a user"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM facebook_pages WHERE user_id = ? ORDER BY page_name', (user_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_facebook_page(user_id: int, page_id: str) -> Optional[Dict]:
+    """Get a specific Facebook page by page_id"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM facebook_pages WHERE user_id = ? AND page_id = ?', (user_id, page_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def add_facebook_page(user_id: int, page_id: str, page_name: str, access_token: str, expires_at: str = None) -> bool:
+    """Add or update a Facebook page"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO facebook_pages (user_id, page_id, page_name, access_token, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, page_id) 
+            DO UPDATE SET page_name = ?, access_token = ?, expires_at = ?
+        ''', (user_id, page_id, page_name, access_token, expires_at, page_name, access_token, expires_at))
+        return True
+
+def delete_facebook_page(user_id: int, page_id: str) -> bool:
+    """Delete a Facebook page connection"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM facebook_pages WHERE user_id = ? AND page_id = ?', (user_id, page_id))
+        return cursor.rowcount > 0
+
+def update_facebook_page_token(user_id: int, page_id: str, access_token: str, expires_at: str = None) -> bool:
+    """Update Facebook page access token"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE facebook_pages SET access_token = ?, expires_at = ? 
+            WHERE user_id = ? AND page_id = ?
+        ''', (access_token, expires_at, user_id, page_id))
         return cursor.rowcount > 0
 
 # ============= STREAM MAPPING FUNCTIONS =============
@@ -926,6 +1260,261 @@ def backup_database(backup_path: str) -> bool:
         print(f"Backup failed: {e}")
         return False
 
+# ============= PLAYLIST CACHE FUNCTIONS =============
+
+def save_playlist_cache(user_id: int, token_file: str, playlists: List[Dict]) -> int:
+    """Save playlists to cache"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        count = 0
+        
+        for playlist in playlists:
+            try:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO playlist_cache 
+                    (user_id, token_file, playlist_id, title, video_count, synced_at)
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (
+                    user_id,
+                    token_file,
+                    playlist['id'],
+                    playlist['title'],
+                    playlist.get('video_count', 0)
+                ))
+                count += 1
+            except Exception as e:
+                print(f"Error saving playlist {playlist.get('id')}: {e}")
+        
+        return count
+
+def get_playlist_cache(user_id: int, token_file: str = None) -> List[Dict]:
+    """Get cached playlists"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        if token_file:
+            cursor.execute('''
+                SELECT * FROM playlist_cache 
+                WHERE user_id = ? AND token_file = ?
+                ORDER BY title
+            ''', (user_id, token_file))
+        else:
+            cursor.execute('''
+                SELECT * FROM playlist_cache 
+                WHERE user_id = ?
+                ORDER BY synced_at DESC, title
+            ''', (user_id,))
+        
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_all_playlist_cache(user_id: int) -> List[Dict]:
+    """Get all cached playlists for user with token name"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                id,
+                user_id,
+                token_file as token_name,
+                playlist_id,
+                title,
+                video_count,
+                synced_at
+            FROM playlist_cache 
+            WHERE user_id = ?
+            ORDER BY synced_at DESC, title
+        ''', (user_id,))
+        
+        return [dict(row) for row in cursor.fetchall()]
+
+def delete_playlist_cache_item(cache_id: int, user_id: int) -> bool:
+    """Delete playlist from cache"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM playlist_cache WHERE id = ? AND user_id = ?', (cache_id, user_id))
+        return cursor.rowcount > 0
+
+def clear_playlist_cache(user_id: int) -> bool:
+    """Clear all playlist cache for user"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM playlist_cache WHERE user_id = ?', (user_id,))
+        return cursor.rowcount > 0
+
+# Custom Prompts Functions
+def get_custom_prompts(user_id: int) -> List[Dict]:
+    """Get all custom prompts for user"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, name, prompt_text, is_default, created_at, updated_at
+            FROM custom_prompts 
+            WHERE user_id = ? 
+            ORDER BY is_default DESC, name ASC
+        ''', (user_id,))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'id': row[0],
+                'name': row[1],
+                'prompt_text': row[2],
+                'is_default': bool(row[3]),
+                'created_at': row[4],
+                'updated_at': row[5]
+            })
+        return results
+
+def add_custom_prompt(user_id: int, name: str, prompt_text: str, is_default: bool = False) -> int:
+    """Add new custom prompt"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # If setting as default, unset other defaults first
+        if is_default:
+            cursor.execute('UPDATE custom_prompts SET is_default = 0 WHERE user_id = ?', (user_id,))
+        
+        cursor.execute('''
+            INSERT INTO custom_prompts (user_id, name, prompt_text, is_default)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, name, prompt_text, 1 if is_default else 0))
+        
+        return cursor.lastrowid
+
+def update_custom_prompt(user_id: int, prompt_id: int, name: str, prompt_text: str, is_default: bool = False) -> bool:
+    """Update custom prompt"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # If setting as default, unset other defaults first
+        if is_default:
+            cursor.execute('UPDATE custom_prompts SET is_default = 0 WHERE user_id = ? AND id != ?', (user_id, prompt_id))
+        
+        cursor.execute('''
+            UPDATE custom_prompts 
+            SET name = ?, prompt_text = ?, is_default = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND user_id = ?
+        ''', (name, prompt_text, 1 if is_default else 0, prompt_id, user_id))
+        
+        return cursor.rowcount > 0
+
+def delete_custom_prompt(user_id: int, prompt_id: int) -> bool:
+    """Delete custom prompt"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM custom_prompts WHERE id = ? AND user_id = ?', (prompt_id, user_id))
+        return cursor.rowcount > 0
+
+def get_default_custom_prompt(user_id: int) -> Dict:
+    """Get default custom prompt for user"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, name, prompt_text, is_default, created_at, updated_at
+            FROM custom_prompts 
+            WHERE user_id = ? AND is_default = 1
+            LIMIT 1
+        ''', (user_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'name': row[1],
+                'prompt_text': row[2],
+                'is_default': bool(row[3]),
+                'created_at': row[4],
+                'updated_at': row[5]
+            }
+        return None
+
+# ============= RANDOM METADATA CACHE FUNCTIONS =============
+
+def save_random_metadata_cache(user_id: int, category: str, titles: List[str], descriptions: List[str], tags: List[str]) -> bool:
+    """Save random metadata cache for user and category"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Convert lists to JSON strings
+        titles_json = json.dumps(titles)
+        descriptions_json = json.dumps(descriptions)
+        tags_json = json.dumps(tags)
+        
+        try:
+            cursor.execute('''
+                INSERT OR REPLACE INTO random_metadata_cache (user_id, category, titles, descriptions, tags, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (user_id, category, titles_json, descriptions_json, tags_json))
+            return True
+        except Exception as e:
+            print(f"Error saving random metadata cache: {e}")
+            return False
+
+def get_random_metadata_cache(user_id: int, category: str) -> Optional[Dict]:
+    """Get random metadata cache for user and category"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM random_metadata_cache 
+            WHERE user_id = ? AND category = ?
+        ''', (user_id, category))
+        
+        row = cursor.fetchone()
+        if row:
+            try:
+                return {
+                    'titles': json.loads(row['titles']),
+                    'descriptions': json.loads(row['descriptions']),
+                    'tags': json.loads(row['tags']),
+                    'created_at': row['created_at'],
+                    'updated_at': row['updated_at']
+                }
+            except Exception as e:
+                print(f"Error parsing random metadata cache: {e}")
+                return None
+        return None
+
+def get_all_random_metadata_cache(user_id: int) -> List[Dict]:
+    """Get all random metadata cache for user"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM random_metadata_cache 
+            WHERE user_id = ?
+            ORDER BY category
+        ''', (user_id,))
+        
+        results = []
+        for row in cursor.fetchall():
+            try:
+                results.append({
+                    'category': row['category'],
+                    'titles': json.loads(row['titles']),
+                    'descriptions': json.loads(row['descriptions']),
+                    'tags': json.loads(row['tags']),
+                    'created_at': row['created_at'],
+                    'updated_at': row['updated_at']
+                })
+            except Exception as e:
+                print(f"Error parsing random metadata cache: {e}")
+        return results
+
+def delete_random_metadata_cache(user_id: int, category: str) -> bool:
+    """Delete random metadata cache for user and category"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM random_metadata_cache WHERE user_id = ? AND category = ?', (user_id, category))
+        return cursor.rowcount > 0
+
+def clear_random_metadata_cache(user_id: int) -> bool:
+    """Clear all random metadata cache for user"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM random_metadata_cache WHERE user_id = ?', (user_id,))
+        return cursor.rowcount > 0
+
+# ============= DATABASE STATS =============
+
 def get_database_stats() -> Dict:
     """Get database statistics"""
     with get_db_connection() as conn:
@@ -933,7 +1522,7 @@ def get_database_stats() -> Dict:
         stats = {}
         
         tables = ['users', 'videos', 'thumbnails', 'live_streams', 'schedules', 
-                  'looped_videos', 'bulk_upload_queue', 'stream_mappings', 'stream_timers']
+                  'looped_videos', 'bulk_upload_queue', 'stream_mappings', 'stream_timers', 'playlist_cache']
         
         for table in tables:
             cursor.execute(f'SELECT COUNT(*) as count FROM {table}')

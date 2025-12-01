@@ -227,22 +227,108 @@
                                 </div>
                             </div>
                             
-                            <div class="cyber-input-group">
+                            <!-- Playlist Selection -->
+                            <div class="cyber-input-group mb-4">
                                 <label class="cyber-label">
-                                    <i class="fas fa-image mr-2"></i>Thumbnail (Optional)
+                                    <i class="fas fa-list mr-2"></i>Playlist (Optional)
                                 </label>
-                                <select name="thumbnailFile" id="thumbnailSelect_add" class="cyber-input">
-                                    <option value="">No thumbnail</option>
-                                    {% for thumbnail in thumbnails %}
-                                    <option value="{{ thumbnail.filename }}">{{ thumbnail.title }}</option>
+                                <select name="playlistId" id="playlistSelect_add" class="cyber-input">
+                                    <option value="">No playlist</option>
+                                    {% for playlist in playlist_options %}
+                                    <option value="{{ playlist.playlist_id }}">{{ playlist.title }} ({{ playlist.video_count }} videos)</option>
                                     {% endfor %}
                                 </select>
+                                <p class="mt-1 text-xs text-slate-400">
+                                    <a href="{{ url_for('playlist_manager') }}" class="text-cyan-400 hover:text-cyan-300">
+                                        <i class="fas fa-sync mr-1"></i>Sync Playlists
+                                    </a>
+                                </p>
                             </div>
                             
-                            <div id="thumbnailPreview_add" style="display: none;" class="mt-3">
-                                <label class="text-sm text-slate-400 mb-2 block">Preview</label>
-                                <div class="flex justify-center">
-                                    <img id="thumbnailPreviewImg_add" src="" class="max-h-48 rounded-lg border border-cyan-500/30">
+                            <!-- Thumbnail Selection -->
+                            <div class="cyber-input-group mb-4">
+                                <label class="cyber-label">
+                                    <i class="fas fa-image mr-2"></i>Thumbnail Selection
+                                </label>
+                                <div class="flex gap-4 mb-3">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="thumbnailMode" value="specific" checked class="mr-2">
+                                        <span class="text-slate-300 text-sm">Specific Thumbnail</span>
+                                    </label>
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="thumbnailMode" value="tag" class="mr-2">
+                                        <span class="text-slate-300 text-sm">Random by Tag</span>
+                                    </label>
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="thumbnailMode" value="none" class="mr-2">
+                                        <span class="text-slate-300 text-sm">None</span>
+                                    </label>
+                                </div>
+                                
+                                <!-- Specific Thumbnail Selection -->
+                                <div id="specificThumbnailSection_add" class="mb-3">
+                                    <select name="thumbnailFile" id="thumbnailSelect_add" class="cyber-input">
+                                        <option value="">No thumbnail</option>
+                                        {% for thumbnail in thumbnails %}
+                                        <option value="{{ thumbnail.filename }}">{{ thumbnail.title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <!-- Random Thumbnail by Tag -->
+                                <div id="randomThumbnailSection_add" style="display: none;">
+                                    <select name="thumbnailTag" id="thumbnailTagSelect_add" class="cyber-input">
+                                        <option value="">Select tag...</option>
+                                        {% for tag in thumbnail_tags %}
+                                        <option value="{{ tag }}">{{ tag }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <p class="mt-1 text-xs text-slate-400">Each schedule will get a random thumbnail with this tag</p>
+                                </div>
+                                
+                                <div id="thumbnailPreview_add" style="display: none;" class="mt-3">
+                                    <label class="text-sm text-slate-400 mb-2 block">Preview</label>
+                                    <div class="flex justify-center">
+                                        <img id="thumbnailPreviewImg_add" src="" class="max-h-48 rounded-lg border border-cyan-500/30">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Random Metadata Generation -->
+                            <div class="glass-panel p-4 rounded-lg border border-orange-500/20 mb-4">
+                                <h4 class="text-sm font-bold text-orange-400 mb-3 font-mono uppercase tracking-wider flex items-center">
+                                    <i class="fas fa-dice mr-2"></i>Random Metadata Generation
+                                </h4>
+                                
+                                <div class="flex items-center mb-3">
+                                    <input type="checkbox" name="useRandomMetadata" id="useRandomMetadata_add"
+                                           class="w-4 h-4 text-orange-500 border-orange-500/30 bg-dark-card rounded focus:ring-orange-500">
+                                    <label for="useRandomMetadata_add" class="ml-2 text-sm text-slate-300">Enable Random Metadata for Repeat Daily</label>
+                                </div>
+                                
+                                <!-- Random Metadata Options (shown when checkbox is checked) -->
+                                <div id="randomMetadataSection_add" style="display: none;">
+                                    <div class="mb-3">
+                                        <label class="block text-sm font-medium text-slate-300 mb-2">
+                                            <i class="fas fa-file-excel mr-2 text-green-400"></i>Select Excel File
+                                        </label>
+                                        <select name="metadataExcelFile" id="metadataExcelFile_select" class="cyber-input">
+                                            <option value="">Use default templates</option>
+                                            {% for file in metadata_files %}
+                                            <option value="{{ file.filename }}">{{ file.name }} ({{ file.count }} templates)</option>
+                                            {% endfor %}
+                                        </select>
+                                        <p class="mt-1 text-xs text-slate-400">
+                                            <a href="{{ url_for('gemini_settings') }}" class="text-orange-400 hover:text-orange-300">
+                                                <i class="fas fa-upload mr-1"></i>Manage Excel Files
+                                            </a>
+                                        </p>
+                                    </div>
+                                    
+                                    <div class="p-3 bg-green-500/10 border border-green-500/30 rounded text-sm text-green-300">
+                                        <i class="fas fa-info-circle mr-1"></i>
+                                        When enabled, metadata (title, description, tags) will be randomly selected from Excel file each time the schedule repeats.
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -488,6 +574,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log('[SCHEDULES] Use existing stream checked, populating select');
                     populateStreamSelect_Add();
                 }
+            }
+        });
+    }
+
+    // Thumbnail mode selection
+    const thumbnailModeRadios = document.querySelectorAll('input[name="thumbnailMode"]');
+    thumbnailModeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const specificSection = document.getElementById('specificThumbnailSection_add');
+            const randomSection = document.getElementById('randomThumbnailSection_add');
+            
+            if (this.value === 'specific') {
+                if (specificSection) specificSection.style.display = 'block';
+                if (randomSection) randomSection.style.display = 'none';
+            } else if (this.value === 'tag') {
+                if (specificSection) specificSection.style.display = 'none';
+                if (randomSection) randomSection.style.display = 'block';
+            } else {
+                if (specificSection) specificSection.style.display = 'none';
+                if (randomSection) randomSection.style.display = 'none';
+            }
+        });
+    });
+
+    // Random metadata toggle
+    const randomMetadataCheckbox = document.getElementById('useRandomMetadata_add');
+    if (randomMetadataCheckbox) {
+        randomMetadataCheckbox.addEventListener('change', function() {
+            const section = document.getElementById('randomMetadataSection_add');
+            if (section) {
+                section.style.display = this.checked ? 'block' : 'none';
             }
         });
     }

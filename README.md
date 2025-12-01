@@ -141,6 +141,27 @@ pm2 save
 - **Database**: SQLite di `jadwalstream.db`
 - **Telegram**: Setup di Settings → Telegram
 
+## 🔄 Database Migration (Update dari Versi Lama)
+
+Jika Anda mengalami error seperti `no such column: synced_at` atau `no such column: title`, jalankan migrasi database:
+
+```bash
+# Cara 1: Jalankan script migrasi
+python3 run_migration.py
+
+# Cara 2: Restart aplikasi (migrasi otomatis)
+pm2 restart jadwalstream
+
+# Cara 3: Manual via Python
+python3 -c "from modules.database.database import migrate_database; migrate_database()"
+```
+
+**Migrasi akan otomatis:**
+- ✅ Menambahkan kolom `synced_at` ke tabel `playlist_cache`
+- ✅ Mengubah nama kolom `playlist_title` → `title`
+- ✅ Menambahkan semua kolom yang hilang
+- ✅ Tidak menghapus data yang sudah ada
+
 ## 🐛 Troubleshooting
 
 ```bash
@@ -153,6 +174,9 @@ pm2 logs jadwalstream
 
 # Restart
 pm2 restart jadwalstream
+
+# Database error? Jalankan migrasi
+python3 run_migration.py
 ```
 
 ## 📞 Support
