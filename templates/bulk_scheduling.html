@@ -759,32 +759,38 @@ function bulkScheduling() {
             return true;
         },
         
-        // Toggle all regular videos
+        // Toggle all regular videos (only visible based on filter)
         toggleAllRegular(checked) {
             const regularCheckboxes = document.querySelectorAll('.regular-video-checkbox');
             regularCheckboxes.forEach(cb => {
                 const value = cb.value;
-                if (checked) {
-                    if (!this.selectedVideos.includes(value)) {
-                        this.selectedVideos.push(value);
+                // Only toggle if video is visible based on current filter
+                if (this.shouldShowVideo(value)) {
+                    if (checked) {
+                        if (!this.selectedVideos.includes(value)) {
+                            this.selectedVideos.push(value);
+                        }
+                    } else {
+                        this.selectedVideos = this.selectedVideos.filter(v => v !== value);
                     }
-                } else {
-                    this.selectedVideos = this.selectedVideos.filter(v => v !== value);
                 }
             });
         },
         
-        // Toggle all looped videos
+        // Toggle all looped videos (only visible based on filter)
         toggleAllLooped(checked) {
             const loopedCheckboxes = document.querySelectorAll('.looped-video-checkbox');
             loopedCheckboxes.forEach(cb => {
                 const value = cb.value;
-                if (checked) {
-                    if (!this.selectedVideos.includes(value)) {
-                        this.selectedVideos.push(value);
+                // Only toggle if video is visible based on current filter
+                if (this.shouldShowVideo(value)) {
+                    if (checked) {
+                        if (!this.selectedVideos.includes(value)) {
+                            this.selectedVideos.push(value);
+                        }
+                    } else {
+                        this.selectedVideos = this.selectedVideos.filter(v => v !== value);
                     }
-                } else {
-                    this.selectedVideos = this.selectedVideos.filter(v => v !== value);
                 }
             });
         },
